@@ -1,6 +1,8 @@
 {
-	"dependencies": {
-		"tailwindcss": "^4.3.3",
-		"@tailwindcss/vite": "^4.3.3"
+	"name": "erxis",
+	"private": true,
+	"packageManager": "pnpm@11.10.0",
+	"devDependencies": {
+		"turbo": "^2.10.12"
 	}
 }
