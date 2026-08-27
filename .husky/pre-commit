@@ -1,0 +1,2 @@
+pnpm test
+turbo build check-types
