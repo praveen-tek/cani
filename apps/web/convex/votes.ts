@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
+import { requireMember } from "./lib/membership";
 
 export const cast = mutation({
   args: {
@@ -9,26 +9,12 @@ export const cast = mutation({
     value: v.union(v.literal(1), v.literal(-1)),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Unauthenticated");
-    }
-
     const product = await ctx.db.get(args.productId);
     if (!product) {
       throw new ConvexError("Product not found");
     }
 
-    const membership = await ctx.db
-      .query("teamMembers")
-      .withIndex("by_team_and_user", (q) =>
-        q.eq("teamId", product.teamId).eq("userId", userId)
-      )
-      .unique();
-
-    if (!membership) {
-      throw new ConvexError("You must be a member of the team to vote.");
-    }
+    const { userId } = await requireMember(ctx, product.teamId);
 
     const existingVote = await ctx.db
       .query("votes")

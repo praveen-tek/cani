@@ -105,6 +105,14 @@ function DiscoverPageInner() {
     }
   }, []);
 
+  const handleClear = () => {
+    setData(null);
+    setInputQuery("");
+    setSearchError(null);
+    setSelectedStores([]);
+    try { sessionStorage.removeItem("cani_discover_cache"); } catch { /* ignore */ }
+  };
+
   const handleSearch = async (queryToRun: string) => {
     const trimmed = queryToRun.trim();
     if (!trimmed) return;
@@ -259,6 +267,18 @@ function DiscoverPageInner() {
               <span>Search</span>
             )}
           </button>
+
+          {(data !== null || inputQuery) && !isSearching && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="h-12 px-4 rounded-2xl border border-neutral-200 bg-white text-neutral-600 text-xs font-normal hover:bg-neutral-50 hover:border-neutral-300 transition cursor-pointer shrink-0 flex items-center gap-1.5"
+              title="Clear results"
+            >
+              <X size={14} weight="light" />
+              <span>Clear</span>
+            </button>
+          )}
         </form>
 
         {/* Example Chips (in idle state) */}

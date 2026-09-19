@@ -1,12 +1,13 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import React, { Component, Suspense, useState, type ReactNode } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery, useConvexAuth } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
+  Archive,
   ArrowLeft,
   ArrowSquareOut,
   CaretDown,
@@ -20,6 +21,50 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
+
+class RoomErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      const message = this.state.error?.message || "An error occurred";
+      const isNotMember = message.toLowerCase().includes("not a member");
+      const heading = isNotMember
+        ? "You are not a member of this room"
+        : "Unable to load room";
+
+      return (
+        <div className="flex items-center justify-center p-8 font-normal">
+          <div className="bg-white p-8 rounded-3xl border border-neutral-200 text-center space-y-4 max-w-sm">
+            <h3 className="font-serif text-xl text-neutral-900 font-normal">
+              {heading}
+            </h3>
+            <p className="text-xs text-neutral-500 font-normal">
+              {message}
+            </p>
+            <Link
+              href="/rooms"
+              className="inline-block px-5 py-2.5 rounded-xl bg-neutral-900 text-white text-xs font-normal hover:bg-black transition"
+            >
+              Back to Rooms
+            </Link>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function formatPrice(amount?: number, currency = "USD", locale = "en-US") {
   if (typeof amount !== "number" || isNaN(amount)) return null;
@@ -37,17 +82,21 @@ function formatPrice(amount?: number, currency = "USD", locale = "en-US") {
 }
 
 function TeamBoardInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const teamIdStr = searchParams.get("id");
   const teamId = (teamIdStr || "") as Id<"teams">;
 
+  const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
+  const shouldFetch = !isAuthLoading && isAuthenticated && Boolean(teamIdStr);
+
   const teamData = useQuery(
     api.teams.get,
-    teamIdStr ? { teamId } : "skip"
+    shouldFetch ? { teamId } : "skip"
   );
   const products = useQuery(
     api.products.listForTeam,
-    teamIdStr ? { teamId } : "skip"
+    shouldFetch ? { teamId } : "skip"
   );
 
   const castVote = useMutation(api.votes.cast);
@@ -55,10 +104,12 @@ function TeamBoardInner() {
   const createInvite = useMutation(api.invites.create);
   const addCustomProduct = useMutation(api.products.addToTeam);
   const addProductByUrl = useAction(api.products.addByUrl);
+  const archiveTeamMutation = useMutation(api.teams.archive);
 
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   const [pasteUrl, setPasteUrl] = useState("");
   const [isAddingByUrl, setIsAddingByUrl] = useState(false);
@@ -116,6 +167,18 @@ function TeamBoardInner() {
       alert(err instanceof Error ? err.message : "Failed to generate invite.");
     } finally {
       setIsCreatingInvite(false);
+    }
+  };
+
+  const handleArchiveTeam = async () => {
+    if (!confirm(`Archive "${teamData.name}"? It will be hidden from your sidebar and can be restored from the Archived Rooms page.`)) return;
+    setIsArchiving(true);
+    try {
+      await archiveTeamMutation({ teamId });
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to archive room.");
+      setIsArchiving(false);
     }
   };
 
@@ -227,6 +290,21 @@ function TeamBoardInner() {
         </div>
 
         <div className="flex items-center gap-3">
+          {teamData.currentRole === "owner" && (
+            <button
+              type="button"
+              onClick={handleArchiveTeam}
+              disabled={isArchiving}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full border border-neutral-200 bg-white text-neutral-600 text-xs font-normal hover:bg-neutral-50 hover:border-neutral-300 transition cursor-pointer disabled:opacity-50"
+            >
+              {isArchiving ? (
+                <span className="w-3.5 h-3.5 border-2 border-neutral-400 border-t-neutral-900 rounded-full animate-spin" />
+              ) : (
+                <Archive size={14} weight="light" />
+              )}
+              <span>Archive room</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowAddProductModal(true)}
@@ -401,7 +479,7 @@ function TeamBoardInner() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="columns-1 md:columns-2 lg:columns-3 gap-5 space-y-0">
             {products.map((item) => {
               const itemCurrency = item.currency || "USD";
               const itemLocale = itemCurrency === "INR" ? "en-IN" : "en-US";
@@ -411,15 +489,15 @@ function TeamBoardInner() {
               return (
                 <div
                   key={item._id}
-                  className="bg-white rounded-3xl border border-neutral-200/80 overflow-hidden hover:border-neutral-300 transition-all flex flex-col justify-between font-normal"
+                  className="break-inside-avoid mb-5 bg-white rounded-3xl border border-neutral-200/80 overflow-hidden hover:border-neutral-300 transition-all flex flex-col justify-between font-normal"
                 >
                   <div>
                     {item.imageUrl ? (
-                      <div className="relative w-full h-48 bg-neutral-100 overflow-hidden">
+                      <div className="w-full bg-neutral-100 overflow-hidden">
                         <img
                           src={item.imageUrl}
                           alt={item.title}
-                          className="w-full h-full object-cover"
+                          className="w-full h-auto block"
                           onError={(e) => {
                             (e.target as HTMLElement).style.display = "none";
                           }}
@@ -641,14 +719,16 @@ function TeamBoardInner() {
 
 export default function TeamPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center p-12">
-          <div className="w-6 h-6 border-2 border-neutral-300 border-t-neutral-900 rounded-full animate-spin" />
-        </div>
-      }
-    >
-      <TeamBoardInner />
-    </Suspense>
+    <RoomErrorBoundary>
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center p-12">
+            <div className="w-6 h-6 border-2 border-neutral-300 border-t-neutral-900 rounded-full animate-spin" />
+          </div>
+        }
+      >
+        <TeamBoardInner />
+      </Suspense>
+    </RoomErrorBoundary>
   );
 }

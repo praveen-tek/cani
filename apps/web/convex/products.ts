@@ -10,6 +10,7 @@ import { internal } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { getMarket } from "./lib/markets";
+import { requireMember } from "./lib/membership";
 
 export const checkMembership = internalQuery({
   args: {
@@ -52,6 +53,16 @@ export const insertProductInternal = internalMutation({
     source: v.string(),
   },
   handler: async (ctx, args) => {
+    const membership = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_team_and_user", (q) =>
+        q.eq("teamId", args.teamId).eq("userId", args.addedBy)
+      )
+      .unique();
+
+    if (!membership) {
+      throw new ConvexError("Not a member of this room");
+    }
     const existing = await ctx.db
       .query("products")
       .withIndex("by_team_and_url", (q) =>
@@ -99,7 +110,7 @@ export const addByUrl = action({
       userId,
     });
     if (!isMember) {
-      throw new ConvexError("You must be a team member to add products.");
+      throw new ConvexError("Not a member of this room");
     }
 
     let validUrl: URL;
@@ -248,21 +259,7 @@ export const addToTeam = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Unauthenticated");
-    }
-
-    const membership = await ctx.db
-      .query("teamMembers")
-      .withIndex("by_team_and_user", (q) =>
-        q.eq("teamId", args.teamId).eq("userId", userId)
-      )
-      .unique();
-
-    if (!membership) {
-      throw new ConvexError("You must be a team member to add products.");
-    }
+    const { userId } = await requireMember(ctx, args.teamId);
 
     let title = "";
     let url = "";
@@ -337,21 +334,7 @@ export const listForTeam = query({
     teamId: v.id("teams"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Unauthenticated");
-    }
-
-    const membership = await ctx.db
-      .query("teamMembers")
-      .withIndex("by_team_and_user", (q) =>
-        q.eq("teamId", args.teamId).eq("userId", userId)
-      )
-      .unique();
-
-    if (!membership) {
-      throw new ConvexError("You are not a member of this team.");
-    }
+    const { userId } = await requireMember(ctx, args.teamId);
 
     const products = await ctx.db
       .query("products")
@@ -413,29 +396,15 @@ export const remove = mutation({
     productId: v.id("products"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Unauthenticated");
-    }
-
     const product = await ctx.db.get(args.productId);
     if (!product) {
       throw new ConvexError("Product not found");
     }
 
-    const membership = await ctx.db
-      .query("teamMembers")
-      .withIndex("by_team_and_user", (q) =>
-        q.eq("teamId", product.teamId).eq("userId", userId)
-      )
-      .unique();
-
-    if (!membership) {
-      throw new ConvexError("You are not a member of this team.");
-    }
+    const { userId, role } = await requireMember(ctx, product.teamId);
 
     const isCreator = product.addedBy === userId;
-    const isOwner = membership.role === "owner";
+    const isOwner = role === "owner";
 
     if (!isCreator && !isOwner) {
       throw new ConvexError("Only the person who added this product or the team owner can remove it.");

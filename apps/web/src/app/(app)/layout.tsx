@@ -31,6 +31,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
+  Archive,
   GearSix,
   House,
   MagnifyingGlass,
@@ -225,6 +226,20 @@ function AppSidebarInner({ onOpenNewTeam }: { onOpenNewTeam: () => void }) {
                 <Link href="/profile">
                   <User size={20} weight="light" />
                   <span>Profile</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname === "/archived"}
+                tooltip="Archived Rooms"
+                className={menuButtonClassName}
+              >
+                <Link href="/archived">
+                  <Archive size={20} weight="light" />
+                  <span>Archived</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

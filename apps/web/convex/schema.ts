@@ -23,7 +23,10 @@ export default defineSchema({
     name: v.string(),
     ownerId: v.id("users"),
     createdAt: v.number(),
-  }).index("by_owner", ["ownerId"]),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_archived", ["ownerId", "archivedAt"]),
 
   teamMembers: defineTable({
     teamId: v.id("teams"),

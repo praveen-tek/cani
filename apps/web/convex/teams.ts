@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
+import { requireMember } from "./lib/membership";
 
 export const create = mutation({
   args: {
@@ -52,6 +53,8 @@ export const listMine = query({
       memberships.map(async (m) => {
         const team = await ctx.db.get(m.teamId);
         if (!team) return null;
+        // Exclude archived teams from the active list
+        if (team.archivedAt !== undefined) return null;
         return {
           ...team,
           role: m.role,
@@ -64,26 +67,42 @@ export const listMine = query({
   },
 });
 
+export const listArchived = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    const memberships = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const teams = await Promise.all(
+      memberships.map(async (m) => {
+        const team = await ctx.db.get(m.teamId);
+        if (!team) return null;
+        if (team.archivedAt === undefined) return null;
+        return {
+          ...team,
+          role: m.role,
+          joinedAt: m.joinedAt,
+        };
+      })
+    );
+
+    return teams
+      .filter((t): t is NonNullable<typeof t> => t !== null)
+      .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0));
+  },
+});
+
 export const get = query({
   args: {
     teamId: v.id("teams"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Unauthenticated");
-    }
-
-    const membership = await ctx.db
-      .query("teamMembers")
-      .withIndex("by_team_and_user", (q) =>
-        q.eq("teamId", args.teamId).eq("userId", userId)
-      )
-      .unique();
-
-    if (!membership) {
-      throw new ConvexError("You are not a member of this team.");
-    }
+    const { role } = await requireMember(ctx, args.teamId);
 
     const team = await ctx.db.get(args.teamId);
     if (!team) {
@@ -114,7 +133,7 @@ export const get = query({
 
     return {
       ...team,
-      currentRole: membership.role,
+      currentRole: role,
       members: membersWithProfiles,
     };
   },
@@ -125,9 +144,10 @@ export const leave = mutation({
     teamId: v.id("teams"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Unauthenticated");
+    const { userId, role } = await requireMember(ctx, args.teamId);
+
+    if (role === "owner") {
+      throw new ConvexError("Team owners cannot leave their team.");
     }
 
     const membership = await ctx.db
@@ -137,15 +157,89 @@ export const leave = mutation({
       )
       .unique();
 
-    if (!membership) {
-      throw new ConvexError("You are not a member of this team.");
+    if (membership) {
+      await ctx.db.delete(membership._id);
+    }
+    return { success: true };
+  },
+});
+
+export const archive = mutation({
+  args: {
+    teamId: v.id("teams"),
+  },
+  handler: async (ctx, args) => {
+    const { role } = await requireMember(ctx, args.teamId);
+    if (role !== "owner") {
+      throw new ConvexError("Only owners can archive a room.");
+    }
+    await ctx.db.patch(args.teamId, { archivedAt: Date.now() });
+    return { success: true };
+  },
+});
+
+export const restore = mutation({
+  args: {
+    teamId: v.id("teams"),
+  },
+  handler: async (ctx, args) => {
+    const { role } = await requireMember(ctx, args.teamId);
+    if (role !== "owner") {
+      throw new ConvexError("Only owners can restore a room.");
+    }
+    await ctx.db.patch(args.teamId, { archivedAt: undefined });
+    return { success: true };
+  },
+});
+
+export const deleteTeam = mutation({
+  args: {
+    teamId: v.id("teams"),
+  },
+  handler: async (ctx, args) => {
+    const { role } = await requireMember(ctx, args.teamId);
+    if (role !== "owner") {
+      throw new ConvexError("Only owners can delete a room.");
     }
 
-    if (membership.role === "owner") {
-      throw new ConvexError("Team owners cannot leave their team.");
+    // Delete votes
+    const votes = await ctx.db
+      .query("votes")
+      .withIndex("by_team", (q) => q.eq("teamId", args.teamId))
+      .collect();
+    for (const vote of votes) {
+      await ctx.db.delete(vote._id);
     }
 
-    await ctx.db.delete(membership._id);
+    // Delete products
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_team", (q) => q.eq("teamId", args.teamId))
+      .collect();
+    for (const product of products) {
+      await ctx.db.delete(product._id);
+    }
+
+    // Delete invites
+    const invites = await ctx.db
+      .query("invites")
+      .withIndex("by_team", (q) => q.eq("teamId", args.teamId))
+      .collect();
+    for (const invite of invites) {
+      await ctx.db.delete(invite._id);
+    }
+
+    // Delete members
+    const members = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_team", (q) => q.eq("teamId", args.teamId))
+      .collect();
+    for (const member of members) {
+      await ctx.db.delete(member._id);
+    }
+
+    // Delete team
+    await ctx.db.delete(args.teamId);
     return { success: true };
   },
 });
