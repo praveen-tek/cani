@@ -1,7 +1,7 @@
 {
 	"name": "erxis",
 	"private": true,
-	"packageManager": "pnpm@11.10.0",
+	"packageManager": "pnpm@11.24.0",
 	"devDependencies": {
 		"husky": "^9.1.7",
 		"turbo": "^2.10.12"

@@ -1,0 +1,457 @@
+import { v } from "convex/values";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
+import { internal } from "./_generated/api";
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { ConvexError } from "convex/values";
+import { getMarket } from "./lib/markets";
+
+export const checkMembership = internalQuery({
+  args: {
+    teamId: v.id("teams"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const membership = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_team_and_user", (q) =>
+        q.eq("teamId", args.teamId).eq("userId", args.userId)
+      )
+      .unique();
+    return Boolean(membership);
+  },
+});
+
+export const getProfileForUser = internalQuery({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
+  },
+});
+
+export const insertProductInternal = internalMutation({
+  args: {
+    teamId: v.id("teams"),
+    addedBy: v.id("users"),
+    title: v.string(),
+    url: v.string(),
+    imageUrl: v.optional(v.string()),
+    price: v.optional(v.number()),
+    salePrice: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    source: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("products")
+      .withIndex("by_team_and_url", (q) =>
+        q.eq("teamId", args.teamId).eq("url", args.url)
+      )
+      .unique();
+
+    if (existing) {
+      return { productId: existing._id, alreadyExisted: true };
+    }
+
+    const productId = await ctx.db.insert("products", {
+      teamId: args.teamId,
+      addedBy: args.addedBy,
+      title: args.title,
+      url: args.url,
+      imageUrl: args.imageUrl,
+      price: args.price,
+      salePrice: args.salePrice,
+      currency: args.currency || "USD",
+      source: args.source,
+      createdAt: Date.now(),
+    });
+
+    return { productId, alreadyExisted: false };
+  },
+});
+
+export const addByUrl = action({
+  args: {
+    teamId: v.id("teams"),
+    url: v.string(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ productId: string; alreadyExisted: boolean }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new ConvexError("Unauthenticated");
+    }
+
+    const isMember = await ctx.runQuery(internal.products.checkMembership, {
+      teamId: args.teamId,
+      userId,
+    });
+    if (!isMember) {
+      throw new ConvexError("You must be a team member to add products.");
+    }
+
+    let validUrl: URL;
+    try {
+      validUrl = new URL(args.url.trim());
+      if (validUrl.protocol !== "http:" && validUrl.protocol !== "https:") {
+        throw new Error("Invalid protocol");
+      }
+    } catch {
+      throw new ConvexError("Please provide a valid HTTP or HTTPS product link.");
+    }
+
+    const cleanHostname = validUrl.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+    let title = cleanHostname;
+    let imageUrl: string | undefined;
+    let price: number | undefined;
+    let salePrice: number | undefined;
+    let currency: string | undefined;
+    const source = cleanHostname;
+
+    const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
+    if (firecrawlApiKey) {
+      try {
+        const profile = await ctx.runQuery(internal.products.getProfileForUser, {
+          userId,
+        });
+        const market = getMarket(profile?.country);
+        currency = market.currency;
+
+        const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${firecrawlApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url: validUrl.toString(),
+            formats: [
+              {
+                type: "json",
+                schema: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    imageUrl: { type: "string" },
+                    price: { type: "number" },
+                    salePrice: { type: "number" },
+                    currency: { type: "string" },
+                    rating: { type: "number" },
+                  },
+                  required: ["title"],
+                },
+                prompt:
+                  "extract the product visible on this page with its title, image url, its current selling price and its original price as plain numbers, currency, and its rating. Only use what is on the page.",
+              },
+            ],
+            onlyMainContent: true,
+            waitFor: 1500,
+            blockAds: true,
+            maxAge: 21600000,
+            location: {
+              country: market.firecrawlCountry,
+              languages: market.languages,
+            },
+            proxy: "auto",
+          }),
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          const scraped =
+            json?.data?.json ||
+            json?.data?.extract ||
+            json?.data?.formats?.json ||
+            json?.json ||
+            {};
+
+          if (typeof scraped.title === "string" && scraped.title.trim().length >= 2) {
+            title = scraped.title.trim();
+          } else if (typeof json?.data?.metadata?.title === "string" && json.data.metadata.title.trim()) {
+            title = json.data.metadata.title.trim();
+          }
+
+          if (typeof scraped.imageUrl === "string" && scraped.imageUrl.trim()) {
+            imageUrl = scraped.imageUrl.trim();
+          } else if (json?.data?.metadata?.ogImage || json?.data?.metadata?.image) {
+            imageUrl = json.data.metadata.ogImage || json.data.metadata.image;
+          }
+
+          const parsedPrice =
+            typeof scraped.price === "number" && !isNaN(scraped.price) ? scraped.price : undefined;
+          const parsedSalePrice =
+            typeof scraped.salePrice === "number" && !isNaN(scraped.salePrice) ? scraped.salePrice : undefined;
+
+          if (parsedPrice !== undefined && parsedSalePrice !== undefined) {
+            if (parsedSalePrice < parsedPrice) {
+              price = parsedPrice;
+              salePrice = parsedSalePrice;
+            } else {
+              price = parsedPrice;
+              salePrice = undefined;
+            }
+          } else if (parsedPrice === undefined && parsedSalePrice !== undefined) {
+            price = parsedSalePrice;
+            salePrice = undefined;
+          } else {
+            price = parsedPrice;
+          }
+
+          if (typeof scraped.currency === "string" && scraped.currency.trim()) {
+            currency = scraped.currency.trim();
+          }
+        }
+      } catch {
+        // Fallback already prepared with hostname as title
+      }
+    }
+
+    return await ctx.runMutation(internal.products.insertProductInternal, {
+      teamId: args.teamId,
+      addedBy: userId,
+      title,
+      url: validUrl.toString(),
+      imageUrl,
+      price,
+      salePrice,
+      currency: currency || "USD",
+      source,
+    });
+  },
+});
+
+export const addToTeam = mutation({
+  args: {
+    teamId: v.id("teams"),
+    suggestionId: v.optional(v.id("suggestions")),
+    customProduct: v.optional(
+      v.object({
+        title: v.string(),
+        url: v.string(),
+        imageUrl: v.optional(v.string()),
+        price: v.optional(v.number()),
+        salePrice: v.optional(v.number()),
+        currency: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new ConvexError("Unauthenticated");
+    }
+
+    const membership = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_team_and_user", (q) =>
+        q.eq("teamId", args.teamId).eq("userId", userId)
+      )
+      .unique();
+
+    if (!membership) {
+      throw new ConvexError("You must be a team member to add products.");
+    }
+
+    let title = "";
+    let url = "";
+    let imageUrl: string | undefined;
+    let price: number | undefined;
+    let salePrice: number | undefined;
+    let currency: string | undefined = "USD";
+    let source = "web";
+
+    if (args.suggestionId) {
+      const suggestion = await ctx.db.get(args.suggestionId);
+      if (!suggestion) {
+        throw new ConvexError("Suggestion not found");
+      }
+      title = suggestion.title;
+      url = suggestion.url;
+      imageUrl = suggestion.imageUrl;
+      price = suggestion.price;
+      salePrice = suggestion.salePrice;
+      currency = suggestion.currency;
+      source = suggestion.source;
+    } else if (args.customProduct) {
+      title = args.customProduct.title.trim();
+      url = args.customProduct.url.trim();
+      imageUrl = args.customProduct.imageUrl;
+      price = args.customProduct.price;
+      salePrice = args.customProduct.salePrice;
+      currency = args.customProduct.currency || "USD";
+      try {
+        source = new URL(url).hostname.replace(/^www\./, "");
+      } catch {
+        source = "web";
+      }
+    } else {
+      throw new ConvexError("Must provide either a suggestionId or product details.");
+    }
+
+    if (!title || !url) {
+      throw new ConvexError("Product must have a title and URL.");
+    }
+
+    const existing = await ctx.db
+      .query("products")
+      .withIndex("by_team_and_url", (q) =>
+        q.eq("teamId", args.teamId).eq("url", url)
+      )
+      .unique();
+
+    if (existing) {
+      return { productId: existing._id, alreadyExisted: true };
+    }
+
+    const productId = await ctx.db.insert("products", {
+      teamId: args.teamId,
+      addedBy: userId,
+      title,
+      url,
+      imageUrl,
+      price,
+      salePrice,
+      currency,
+      source,
+      createdAt: Date.now(),
+    });
+
+    return { productId, alreadyExisted: false };
+  },
+});
+
+export const listForTeam = query({
+  args: {
+    teamId: v.id("teams"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new ConvexError("Unauthenticated");
+    }
+
+    const membership = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_team_and_user", (q) =>
+        q.eq("teamId", args.teamId).eq("userId", userId)
+      )
+      .unique();
+
+    if (!membership) {
+      throw new ConvexError("You are not a member of this team.");
+    }
+
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_team", (q) => q.eq("teamId", args.teamId))
+      .collect();
+
+    const productsWithVotes = await Promise.all(
+      products.map(async (product) => {
+        const votes = await ctx.db
+          .query("votes")
+          .withIndex("by_product", (q) => q.eq("productId", product._id))
+          .collect();
+
+        let score = 0;
+        let upvotes = 0;
+        let downvotes = 0;
+        let myVote: 1 | -1 | null = null;
+
+        for (const vRecord of votes) {
+          score += vRecord.value;
+          if (vRecord.value === 1) {
+            upvotes += 1;
+          } else if (vRecord.value === -1) {
+            downvotes += 1;
+          }
+          if (vRecord.userId === userId) {
+            myVote = vRecord.value;
+          }
+        }
+
+        const addedByProfile = await ctx.db
+          .query("profiles")
+          .withIndex("by_user", (q) => q.eq("userId", product.addedBy))
+          .unique();
+        const addedByUser = await ctx.db.get(product.addedBy);
+
+        return {
+          ...product,
+          score,
+          upvotes,
+          downvotes,
+          myVote,
+          addedByName: addedByProfile?.name || addedByUser?.name || "Team Member",
+        };
+      })
+    );
+
+    return productsWithVotes.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return b.createdAt - a.createdAt;
+    });
+  },
+});
+
+export const remove = mutation({
+  args: {
+    productId: v.id("products"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new ConvexError("Unauthenticated");
+    }
+
+    const product = await ctx.db.get(args.productId);
+    if (!product) {
+      throw new ConvexError("Product not found");
+    }
+
+    const membership = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_team_and_user", (q) =>
+        q.eq("teamId", product.teamId).eq("userId", userId)
+      )
+      .unique();
+
+    if (!membership) {
+      throw new ConvexError("You are not a member of this team.");
+    }
+
+    const isCreator = product.addedBy === userId;
+    const isOwner = membership.role === "owner";
+
+    if (!isCreator && !isOwner) {
+      throw new ConvexError("Only the person who added this product or the team owner can remove it.");
+    }
+
+    const votes = await ctx.db
+      .query("votes")
+      .withIndex("by_product", (q) => q.eq("productId", product._id))
+      .collect();
+
+    for (const vote of votes) {
+      await ctx.db.delete(vote._id);
+    }
+
+    await ctx.db.delete(product._id);
+    return { success: true };
+  },
+});
+
