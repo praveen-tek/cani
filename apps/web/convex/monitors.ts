@@ -12,19 +12,13 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { getMarket } from "./lib/markets";
 import { normalizeUrl } from "./lib/firecrawl";
-import { enforce, COST_MONITOR_CHECK_PAGE } from "./lib/limits";
+import { enforce, estimateMonitorDailyCost } from "./lib/limits";
 import type { Id } from "./_generated/dataModel";
-
-export function getScheduleChecksPerDay(scheduleText?: string): number {
-  const lower = (scheduleText || "").toLowerCase().trim();
-  if (lower.includes("day") || lower === "daily") return 1;
-  if (lower.includes("hour") && !lower.includes("30") && !lower.includes("minute")) return 24;
-  return 48; // "every 30 minutes" or default
-}
 
 export const checkMonitorCapacityInternal = internalQuery({
   args: {
     userId: v.id("users"),
+    kind: v.union(v.literal("product"), v.literal("search")),
     newSchedule: v.string(),
   },
   handler: async (ctx, args) => {
@@ -35,31 +29,63 @@ export const checkMonitorCapacityInternal = internalQuery({
 
     const userActive = userMonitors.filter((m) => m.status === "active");
     if (userActive.length >= 5) {
-      throw new ConvexError("You have reached the maximum of 5 active watches.");
+      throw new ConvexError(
+        "You are already watching 5 things. Remove one to add another."
+      );
     }
 
     const allMonitors = await ctx.db.query("monitors").collect();
     const activeMonitors = allMonitors.filter((m) => m.status === "active");
 
     const maxActiveMonitors = Number(process.env.MAX_ACTIVE_MONITORS ?? 25);
-    if (activeMonitors.length >= maxActiveMonitors) {
-      throw new ConvexError("Watching is at capacity right now. Please try again later.");
-    }
-
     const dailyBudget = Number(process.env.FIRECRAWL_DAILY_CREDIT_BUDGET ?? 150);
     const maxCreditCapacity = 0.4 * dailyBudget;
 
     let currentDailyCost = 0;
     for (const m of activeMonitors) {
-      const checks = getScheduleChecksPerDay(m.schedule);
-      currentDailyCost += checks * COST_MONITOR_CHECK_PAGE * 1;
+      currentDailyCost += estimateMonitorDailyCost(m.kind, m.schedule);
     }
 
-    const newChecks = getScheduleChecksPerDay(args.newSchedule);
-    const newCost = newChecks * COST_MONITOR_CHECK_PAGE * 1;
+    const newCost = estimateMonitorDailyCost(args.kind, args.newSchedule);
 
-    if (currentDailyCost + newCost > maxCreditCapacity) {
-      throw new ConvexError("Watching is at capacity right now. Please try again later.");
+    if (
+      activeMonitors.length >= maxActiveMonitors ||
+      currentDailyCost + newCost > maxCreditCapacity
+    ) {
+      console.log(
+        "Capacity refusal:",
+        activeMonitors.length,
+        currentDailyCost,
+        newCost
+      );
+      throw new ConvexError(
+        "Watching is at capacity right now. Please try again later."
+      );
+    }
+  },
+});
+
+export const cleanStaleMonitorsInternal = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    const allMonitors = await ctx.db.query("monitors").collect();
+    for (const m of allMonitors) {
+      const isStaleError =
+        m.status === "error" &&
+        (m.createdAt || m._creationTime) < oneHourAgo;
+      const isEmptyRemote =
+        !m.firecrawlMonitorId || m.firecrawlMonitorId.trim() === "";
+      if (isStaleError || isEmptyRemote) {
+        const alerts = await ctx.db
+          .query("alerts")
+          .withIndex("by_monitor", (q) => q.eq("monitorId", m._id))
+          .collect();
+        for (const a of alerts) {
+          await ctx.db.delete(a._id);
+        }
+        await ctx.db.delete(m._id);
+      }
     }
   },
 });
@@ -395,7 +421,7 @@ export const createProductWatch = action({
     const market = getMarket(profile?.country);
 
     const title = args.title?.trim() || validUrl.hostname.replace(/^www\./, "");
-    const scheduleText = args.schedule?.trim() || "every 30 minutes";
+    const scheduleText = args.schedule?.trim() || "daily";
     const goalText =
       args.goal?.trim() ||
       "Alert when the price, sale price, or in-stock availability of this product changes.";
@@ -403,6 +429,7 @@ export const createProductWatch = action({
     await enforce(ctx, "monitorCreateDaily", { key: userId });
     await ctx.runQuery(internal.monitors.checkMonitorCapacityInternal, {
       userId,
+      kind: "product",
       newSchedule: scheduleText,
     });
 
@@ -455,48 +482,67 @@ export const createProductWatch = action({
       },
     };
 
-    const res = await fetch("https://api.firecrawl.dev/v2/monitor", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${firecrawlApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
+    let firecrawlMonitorId: string | null = null;
+    try {
+      const res = await fetch("https://api.firecrawl.dev/v2/monitor", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${firecrawlApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("Firecrawl monitor create error:", res.status, errText);
-      throw new ConvexError(
-        `Failed to create watch with Firecrawl (${res.status}). Please try again.`
-      );
-    }
-
-    const data = await res.json();
-    const firecrawlMonitorId: string = data?.data?.id || data?.id;
-
-    if (!firecrawlMonitorId) {
-      throw new ConvexError("Failed to obtain monitor ID from Firecrawl.");
-    }
-
-    const monitorId: Id<"monitors"> = await ctx.runMutation(
-      internal.monitors.insertMonitorInternal,
-      {
-        userId,
-        teamId: args.teamId,
-        kind: "product",
-        firecrawlMonitorId,
-        title,
-        url: normalizedUrl,
-        country: market.country,
-        currency: market.currency,
-        schedule: scheduleText,
-        lastPrice: args.initialPrice,
-        lastSalePrice: args.initialSalePrice,
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new ConvexError(
+          `Failed to create watch with Firecrawl (${res.status}). Please try again.`
+        );
       }
-    );
 
-    return { monitorId, firecrawlMonitorId };
+      const data = await res.json();
+      firecrawlMonitorId = data?.data?.id || data?.id;
+
+      if (!firecrawlMonitorId) {
+        throw new ConvexError("Failed to obtain monitor ID from Firecrawl.");
+      }
+
+      const monitorId: Id<"monitors"> = await ctx.runMutation(
+        internal.monitors.insertMonitorInternal,
+        {
+          userId,
+          teamId: args.teamId,
+          kind: "product",
+          firecrawlMonitorId,
+          title,
+          url: normalizedUrl,
+          country: market.country,
+          currency: market.currency,
+          schedule: scheduleText,
+          lastPrice: args.initialPrice,
+          lastSalePrice: args.initialSalePrice,
+        }
+      );
+
+      return { monitorId, firecrawlMonitorId };
+    } catch (err) {
+      if (firecrawlMonitorId) {
+        try {
+          await fetch(
+            `https://api.firecrawl.dev/v2/monitor/${firecrawlMonitorId}`,
+            {
+              method: "DELETE",
+              headers: {
+                Authorization: `Bearer ${firecrawlApiKey}`,
+              },
+            }
+          );
+        } catch {
+          // ignore rollback error
+        }
+      }
+      throw err;
+    }
   },
 });
 
@@ -529,7 +575,7 @@ export const createSearchWatch = action({
     });
     const market = getMarket(profile?.country);
 
-    const scheduleText = args.schedule?.trim() || "every 30 minutes";
+    const scheduleText = args.schedule?.trim() || "daily";
     const goalText =
       args.goal?.trim() ||
       `Alert when a new product launch, deal, or discount matching "${trimmedQuery}" appears.`;
@@ -537,6 +583,7 @@ export const createSearchWatch = action({
     await enforce(ctx, "monitorCreateDaily", { key: userId });
     await ctx.runQuery(internal.monitors.checkMonitorCapacityInternal, {
       userId,
+      kind: "search",
       newSchedule: scheduleText,
     });
 
@@ -555,7 +602,8 @@ export const createSearchWatch = action({
           type: "search",
           queries: [trimmedQuery],
           searchWindow: "24h",
-          maxResults: 10,
+          maxResults: 5,
+          limit: 5,
         },
       ],
       webhook: {
@@ -564,46 +612,65 @@ export const createSearchWatch = action({
       },
     };
 
-    const res = await fetch("https://api.firecrawl.dev/v2/monitor", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${firecrawlApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
+    let firecrawlMonitorId: string | null = null;
+    try {
+      const res = await fetch("https://api.firecrawl.dev/v2/monitor", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${firecrawlApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("Firecrawl search monitor create error:", res.status, errText);
-      throw new ConvexError(
-        `Failed to create search watch with Firecrawl (${res.status}).`
-      );
-    }
-
-    const data = await res.json();
-    const firecrawlMonitorId: string = data?.data?.id || data?.id;
-
-    if (!firecrawlMonitorId) {
-      throw new ConvexError("Failed to obtain monitor ID from Firecrawl.");
-    }
-
-    const monitorId: Id<"monitors"> = await ctx.runMutation(
-      internal.monitors.insertMonitorInternal,
-      {
-        userId,
-        teamId: args.teamId,
-        kind: "search",
-        firecrawlMonitorId,
-        title: `Deals & launches: "${trimmedQuery}"`,
-        query: trimmedQuery,
-        country: market.country,
-        currency: market.currency,
-        schedule: scheduleText,
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new ConvexError(
+          `Failed to create search watch with Firecrawl (${res.status}).`
+        );
       }
-    );
 
-    return { monitorId, firecrawlMonitorId };
+      const data = await res.json();
+      firecrawlMonitorId = data?.data?.id || data?.id;
+
+      if (!firecrawlMonitorId) {
+        throw new ConvexError("Failed to obtain monitor ID from Firecrawl.");
+      }
+
+      const monitorId: Id<"monitors"> = await ctx.runMutation(
+        internal.monitors.insertMonitorInternal,
+        {
+          userId,
+          teamId: args.teamId,
+          kind: "search",
+          firecrawlMonitorId,
+          title: `Deals & launches: "${trimmedQuery}"`,
+          query: trimmedQuery,
+          country: market.country,
+          currency: market.currency,
+          schedule: scheduleText,
+        }
+      );
+
+      return { monitorId, firecrawlMonitorId };
+    } catch (err) {
+      if (firecrawlMonitorId) {
+        try {
+          await fetch(
+            `https://api.firecrawl.dev/v2/monitor/${firecrawlMonitorId}`,
+            {
+              method: "DELETE",
+              headers: {
+                Authorization: `Bearer ${firecrawlApiKey}`,
+              },
+            }
+          );
+        } catch {
+          // ignore rollback error
+        }
+      }
+      throw err;
+    }
   },
 });
 

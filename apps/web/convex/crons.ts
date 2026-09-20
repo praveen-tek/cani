@@ -15,4 +15,10 @@ crons.daily(
   internal.monitors.autoPauseInactiveMonitors
 );
 
+crons.daily(
+  "clean-stale-monitors",
+  { hourUTC: 5, minuteUTC: 0 },
+  internal.monitors.cleanStaleMonitorsInternal
+);
+
 export default crons;

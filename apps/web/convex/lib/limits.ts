@@ -24,6 +24,24 @@ export function estimateAddByUrlCost(): number {
   return COST_SCRAPE_PAGE + COST_JSON_EXTRA_PAGE; // 1 + 4 = 5
 }
 
+export function getMonitorChecksPerDay(scheduleText?: string): number {
+  const lower = (scheduleText || "").toLowerCase().trim();
+  if (lower.includes("day") || lower === "daily") return 1;
+  if (lower.includes("hour") && !lower.includes("30") && !lower.includes("minute")) return 24;
+  return 48;
+}
+
+export function estimateMonitorDailyCost(
+  kind: "product" | "search",
+  scheduleText?: string
+): number {
+  const checksPerDay = getMonitorChecksPerDay(scheduleText);
+  if (kind === "product") {
+    return checksPerDay * (COST_SCRAPE_PAGE + COST_JSON_EXTRA_PAGE);
+  }
+  return checksPerDay * COST_SEARCH_CALL;
+}
+
 function scaleRate(rate: number): number {
   const scale = Number(process.env.RATE_LIMIT_SCALE ?? 1);
   return Math.max(1, Math.round(rate * scale));

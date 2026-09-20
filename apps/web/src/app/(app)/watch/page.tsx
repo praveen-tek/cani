@@ -24,9 +24,9 @@ import {
 import { getErrorMessage } from "@/lib/rate-limit-error";
 
 const FREQUENCY_OPTIONS = [
-  { label: "Every 30 min", value: "every 30 minutes" },
-  { label: "Hourly", value: "hourly" },
   { label: "Daily", value: "daily" },
+  { label: "Hourly", value: "hourly" },
+  { label: "Every 30 min", value: "every 30 minutes" },
 ];
 
 const PRODUCT_GOAL_PRESETS = [
@@ -60,7 +60,7 @@ export default function WatchPage() {
   const [productTitle, setProductTitle] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [goal, setGoal] = useState(PRODUCT_GOAL_PRESETS[0].value);
-  const [schedule, setSchedule] = useState("every 30 minutes");
+  const [schedule, setSchedule] = useState("daily");
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
