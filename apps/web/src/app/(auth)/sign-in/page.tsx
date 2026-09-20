@@ -96,7 +96,7 @@ export default function SignInPage() {
               Sign in to Cani
             </h1>
             <p className="text-xs text-gray-500 mt-2 leading-relaxed px-4">
-              Deploy autonomous agents to watch restocks, price drops, and sizes. For free
+              Search stores, create shared rooms, and track price drops. For free
             </p>
           </div>
 

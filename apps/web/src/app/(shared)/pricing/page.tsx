@@ -36,99 +36,99 @@ interface PlanTier {
 
 const PLANS: PlanTier[] = [
   {
-    id: "free",
-    name: "Explorer",
-    description: "For casual shoppers tracking an occasional drop or seasonal wishlist item.",
+    id: "search",
+    name: "Search & Discover",
+    description: "Search across top stores in India and the US in one clean interface.",
     monthlyPrice: 0,
     annualPrice: 0,
     buttonText: "Start for Free",
     buttonVariant: "outline",
     features: [
-      "Up to 3 active product watches",
-      "Hourly inventory & price checks",
-      "Email restock notifications",
-      "Universal storefront link parsing",
-      "Standard community support",
+      "Flipkart, Amazon.in and Myntra (IN)",
+      "Amazon, Walmart and Best Buy (US)",
+      "Price, discount and rating details",
+      "Direct links to store listings",
+      "Automatic currency detection",
     ],
     specs: {
-      scans: "1 hour",
-      watches: "3 items",
+      scans: "Scheduled",
+      watches: "Included",
       channels: "Email",
-      autoBuy: "Manual link",
+      autoBuy: "Direct Link",
     },
   },
   {
-    id: "pro",
-    name: "Pro Shopper",
-    badge: "Most Popular",
+    id: "rooms",
+    name: "Shared Rooms",
+    badge: "Popular",
     isPopular: true,
-    description: "For serious buyers who need sub-minute restock detection and zero missed drops.",
-    monthlyPrice: 12,
-    annualPrice: 10,
-    buttonText: "Start 7-Day Free Trial",
+    description: "Create shared rooms, invite friends, and vote together on what to buy.",
+    monthlyPrice: 0,
+    annualPrice: 0,
+    buttonText: "Create a Room",
     buttonVariant: "solid",
     features: [
-      "Unlimited active product watches",
-      "Real-time 60-second background scans",
-      "Instant SMS, Email & Push alerts",
-      "Natural language custom filter prompts",
-      "Multi-store variant & size matching",
-      "Pre-filled 1-Click checkout links",
-      "Priority proxy pool & anti-bot bypass",
+      "Shared shopping room boards",
+      "Invite friends via link or email",
+      "Add products from search or link",
+      "Live up and down voting",
+      "Real-time score updates",
+      "Shared alerts for all members",
+      "Sign in with Google",
     ],
     specs: {
-      scans: "60 seconds",
-      watches: "Unlimited",
-      channels: "SMS, Email, Push",
-      autoBuy: "1-Click Cart Pre-fill",
+      scans: "Scheduled",
+      watches: "Included",
+      channels: "Email",
+      autoBuy: "Direct Link",
     },
   },
   {
-    id: "concierge",
-    name: "Concierge",
-    description: "For power collectors, rare grails, and automated high-heat releases.",
-    monthlyPrice: 29,
-    annualPrice: 24,
-    buttonText: "Get Concierge Access",
+    id: "alerts",
+    name: "Watches & Alerts",
+    description: "Watch products for price drops and searches for new launches and deals.",
+    monthlyPrice: 0,
+    annualPrice: 0,
+    buttonText: "Set a Watch",
     buttonVariant: "outline",
     features: [
-      "Everything in Pro Shopper",
-      "Autonomous Auto-Buy execution agent",
-      "Multi-region tracking (US, EU, UK, JP)",
-      "High-speed residential proxy network",
-      "Custom webhook integrations (Discord / Slack)",
-      "Dedicated account concierge manager",
-      "VIP early feature access",
+      "Product price drop monitoring",
+      "Search query launch alerts",
+      "Checks every 30m, 1h, or daily",
+      "Email alert notifications",
+      "In-app alerts feed with history",
+      "Quick watch setup from search",
+      "Manage all watches in one place",
     ],
     specs: {
-      scans: "Continuous / Instant",
-      watches: "Unlimited + Multi-region",
-      channels: "SMS, Webhooks, Slack",
-      autoBuy: "Autonomous Auto-Checkout",
+      scans: "Scheduled",
+      watches: "Included",
+      channels: "Email",
+      autoBuy: "Direct Link",
     },
   },
 ];
 
 const PRICING_FAQS = [
   {
-    q: "Can I cancel or change my plan anytime?",
-    a: "Yes. There are no contracts or commitments. You can upgrade, downgrade, or cancel your subscription with a single click inside your dashboard settings.",
+    q: "Is Cani free to use?",
+    a: "Yes. Cani is completely free to use during early access. There are no paid tiers, hidden fees, or subscriptions.",
   },
   {
-    q: "How does the 7-day Pro trial work?",
-    a: "You get full, unrestricted access to all Pro Shopper features for 7 days. You can experience real-time 60-second alerts with zero risk.",
+    q: "How do shared shopping rooms work?",
+    a: "Create a room and invite friends using an invite link or by email. Everyone can add products and vote up or down in real time.",
   },
   {
-    q: "How fast is Cani compared to standard stock alert tools?",
-    a: "Most price trackers refresh every 6–24 hours. Cani runs autonomous headless browser agents continuously, checking dynamic DOM elements and size buttons every 60 seconds on Pro.",
+    q: "Which stores are supported?",
+    a: "Search covers Flipkart, Amazon.in and Myntra in India, plus Amazon, Walmart and Best Buy in the US. You can paste any link into a room.",
   },
   {
-    q: "What e-commerce platforms and storefronts are supported?",
-    a: "Cani uses autonomous visual and DOM comprehension, meaning it works on virtually any public website with a URL: Shopify, Amazon, SSENSE, Farfetch, Nike, Grailed, and independent boutiques.",
+    q: "How do price alerts work?",
+    a: "Set a watch on a product or search. We run scheduled checks every 30 minutes, hourly, or daily and notify you when prices drop.",
   },
   {
-    q: "How does the Autonomous Auto-Buy agent work?",
-    a: "Concierge users can configure spend limits and pre-authorize payment credentials. When the exact item restocks at your target price, Cani can autonomously reserve and checkout the item for you.",
+    q: "Do I buy products directly on Cani?",
+    a: "No. Cani links directly to the store's website where you make your purchase safely on the retailer's site.",
   },
 ];
 
@@ -149,10 +149,10 @@ export default function PricingPage() {
         <section className="px-6 sm:px-8 pt-16 pb-12 max-w-5xl mx-auto text-center">
           <AnimatedContent distance={40} direction="vertical" delay={0.1}>
             <h1 className="font-serif text-5xl sm:text-6xl text-gray-900 leading-tight">
-              Invest in your time back.
+              Early access pricing.
             </h1>
             <p className="text-gray-600 text-base sm:text-lg mt-4 max-w-2xl mx-auto">
-              Never refresh a product page again. Pick a plan tailored to how you shop.
+              Cani is free to use during early access. Search stores, share rooms, vote, and get alerts.
             </p>
 
             {/* Billing Cycle Toggle */}
@@ -166,7 +166,7 @@ export default function PricingPage() {
                     : "text-gray-500 hover:text-gray-900"
                 }`}
               >
-                Monthly billing
+                Early access
               </button>
               <button
                 type="button"
@@ -177,9 +177,9 @@ export default function PricingPage() {
                     : "text-gray-500 hover:text-gray-900"
                 }`}
               >
-                <span>Annual billing</span>
+                <span>Free tier</span>
                 <span className="px-2 py-0.5 rounded-full text-2xs bg-emerald-500/20 text-emerald-300 font-semibold">
-                  Save 20%
+                  100% Free
                 </span>
               </button>
             </div>
@@ -238,7 +238,7 @@ export default function PricingPage() {
                             plan.isPopular ? "text-neutral-400" : "text-gray-500"
                           }`}
                         >
-                          / month
+                          / free
                         </span>
                         {billingCycle === "annual" && plan.monthlyPrice > 0 && (
                           <span
@@ -316,7 +316,7 @@ export default function PricingPage() {
                 Detailed Plan Comparison
               </h2>
               <p className="text-xs text-gray-500 mt-2">
-                All plans include universal storefront support and zero-spam verification.
+                All features are open to everyone during early access.
               </p>
             </div>
 
@@ -325,47 +325,47 @@ export default function PricingPage() {
                 <thead className="bg-gray-50/80 border-b border-gray-200 font-serif text-sm text-gray-900">
                   <tr>
                     <th className="p-4 sm:p-6">Feature</th>
-                    <th className="p-4 sm:p-6">Explorer</th>
-                    <th className="p-4 sm:p-6 bg-neutral-100/70 font-semibold">Pro Shopper</th>
-                    <th className="p-4 sm:p-6">Concierge</th>
+                    <th className="p-4 sm:p-6">Search & Discover</th>
+                    <th className="p-4 sm:p-6 bg-neutral-100/70 font-semibold">Shared Rooms</th>
+                    <th className="p-4 sm:p-6">Watches & Alerts</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-gray-600">
                   <tr>
                     <td className="p-4 sm:p-6 font-medium text-gray-900">Scan Frequency</td>
-                    <td className="p-4 sm:p-6">1 hour</td>
-                    <td className="p-4 sm:p-6 bg-neutral-50/50 font-semibold text-gray-900">60 seconds</td>
-                    <td className="p-4 sm:p-6">Continuous / Instant</td>
+                    <td className="p-4 sm:p-6">Scheduled</td>
+                    <td className="p-4 sm:p-6 bg-neutral-50/50 font-semibold text-gray-900">Scheduled</td>
+                    <td className="p-4 sm:p-6">30m, 1h, Daily</td>
                   </tr>
                   <tr>
                     <td className="p-4 sm:p-6 font-medium text-gray-900">Active Watches</td>
-                    <td className="p-4 sm:p-6">3 items</td>
-                    <td className="p-4 sm:p-6 bg-neutral-50/50 font-semibold text-gray-900">Unlimited</td>
-                    <td className="p-4 sm:p-6">Unlimited</td>
+                    <td className="p-4 sm:p-6">Included</td>
+                    <td className="p-4 sm:p-6 bg-neutral-50/50 font-semibold text-gray-900">Included</td>
+                    <td className="p-4 sm:p-6">Included</td>
                   </tr>
                   <tr>
                     <td className="p-4 sm:p-6 font-medium text-gray-900">Notification Channels</td>
                     <td className="p-4 sm:p-6">Email</td>
-                    <td className="p-4 sm:p-6 bg-neutral-50/50 font-semibold text-gray-900">SMS, Push, Email</td>
-                    <td className="p-4 sm:p-6">SMS, Webhooks, Slack</td>
+                    <td className="p-4 sm:p-6 bg-neutral-50/50 font-semibold text-gray-900">In-App & Email</td>
+                    <td className="p-4 sm:p-6">In-App & Email</td>
                   </tr>
                   <tr>
-                    <td className="p-4 sm:p-6 font-medium text-gray-900">Checkout Handoff</td>
-                    <td className="p-4 sm:p-6">Manual Link</td>
-                    <td className="p-4 sm:p-6 bg-neutral-50/50 font-semibold text-gray-900">1-Click Cart Pre-fill</td>
-                    <td className="p-4 sm:p-6">Autonomous Auto-Buy</td>
+                    <td className="p-4 sm:p-6 font-medium text-gray-900">Store Links</td>
+                    <td className="p-4 sm:p-6">Direct Link</td>
+                    <td className="p-4 sm:p-6 bg-neutral-50/50 font-semibold text-gray-900">Direct Link</td>
+                    <td className="p-4 sm:p-6">Direct Link</td>
                   </tr>
                   <tr>
-                    <td className="p-4 sm:p-6 font-medium text-gray-900">Anti-Bot & Proxy Pool</td>
-                    <td className="p-4 sm:p-6">Standard</td>
-                    <td className="p-4 sm:p-6 bg-neutral-50/50 font-semibold text-gray-900">Priority Pool</td>
-                    <td className="p-4 sm:p-6">Dedicated Residential</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 sm:p-6 font-medium text-gray-900">Multi-Region Storefronts</td>
+                    <td className="p-4 sm:p-6 font-medium text-gray-900">Group Voting</td>
                     <td className="p-4 sm:p-6">—</td>
-                    <td className="p-4 sm:p-6 bg-neutral-50/50">US / EU</td>
-                    <td className="p-4 sm:p-6">US, EU, UK, JP, Global</td>
+                    <td className="p-4 sm:p-6 bg-neutral-50/50 font-semibold text-gray-900">Live Up/Down</td>
+                    <td className="p-4 sm:p-6">Live Up/Down</td>
+                  </tr>
+                  <tr>
+                    <td className="p-4 sm:p-6 font-medium text-gray-900">Supported Markets</td>
+                    <td className="p-4 sm:p-6">India & US</td>
+                    <td className="p-4 sm:p-6 bg-neutral-50/50">India & US</td>
+                    <td className="p-4 sm:p-6">India & US</td>
                   </tr>
                 </tbody>
               </table>
@@ -381,7 +381,7 @@ export default function PricingPage() {
                 Frequently Asked Questions
               </h2>
               <p className="text-xs text-gray-500 mt-2">
-                Have questions before choosing a plan? We've got answers.
+                Have questions before using Cani? We've got answers.
               </p>
             </div>
 
@@ -436,10 +436,10 @@ export default function PricingPage() {
           <div className="bg-neutral-900 text-white rounded-3xl p-10 sm:p-14 relative overflow-hidden">
             <div className="relative z-10 max-w-xl mx-auto">
               <h2 className="font-serif text-3xl sm:text-4xl leading-tight">
-                Ready to stop manually checking product tabs?
+                Ready to shop with friends and decide together?
               </h2>
               <p className="text-neutral-400 text-xs sm:text-sm mt-3 mb-8 leading-relaxed">
-                Join thousands of shoppers using Cani to catch restocks, price drops, and rare pieces the second they go live.
+                Join early access today. Search stores, create shared rooms, and get price drop alerts.
               </p>
               <button
                 type="button"

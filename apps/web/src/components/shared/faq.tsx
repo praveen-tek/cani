@@ -24,7 +24,7 @@ export function FAQ() {
             buyers ask
           </h2>
           <p className="text-gray-600 mt-4">
-            Every good agent starts with a few good questions.
+            Answers to common questions about shopping with Cani.
           </p>
         </div>
       </AnimatedContent>
@@ -54,9 +54,7 @@ export function FAQ() {
               </AccordionTrigger>
               <AccordionContent className="origin-top">
                 <p className="pr-8 pt-3 text-gray-500">
-                  Cani watches products you care about and acts on your behalf —
-                  tracking restocks, price drops, and new releases so you don't
-                  have to check manually.
+                  Cani is a shared shopping board where you search stores, add items to a room, vote with friends, and track price drops and new product launches.
                 </p>
               </AccordionContent>
             </AccordionItem>
@@ -71,9 +69,7 @@ export function FAQ() {
               </AccordionTrigger>
               <AccordionContent className="origin-top">
                 <p className="pr-8 pt-3 text-gray-500">
-                  Pin any product page and tell Cani what to watch for in plain
-                  language. It monitors the page and reasons about whether a
-                  change actually matches your intent.
+                  Watch any product or search query. Cani runs scheduled checks (every 30 minutes, hourly, or daily) and creates an alert when a price drops or changes.
                 </p>
               </AccordionContent>
             </AccordionItem>
@@ -88,9 +84,7 @@ export function FAQ() {
               </AccordionTrigger>
               <AccordionContent className="origin-top">
                 <p className="pr-8 pt-3 text-gray-500">
-                  As soon as a relevant change is detected, you get an email.
-                  You can even reply to that email to adjust or cancel the
-                  watch.
+                  Notifications arrive when a scheduled check detects a price drop or new match, with updates shown in the app and sent by email.
                 </p>
               </AccordionContent>
             </AccordionItem>
@@ -101,14 +95,13 @@ export function FAQ() {
             >
               <AccordionTrigger className="w-full py-0.5 text-left text-gray-900 flex items-center justify-between">
                 <div className="text-lg">
-                  Can I watch something for someone else?
+                  Can I watch products for a group?
                 </div>
                 <Plus className="h-4 w-4 text-gray-900 transition-transform duration-200 group-data-expanded:rotate-45" />
               </AccordionTrigger>
               <AccordionContent className="origin-top">
                 <p className="pr-8 pt-3 text-gray-500">
-                  Yes. You can set up a watch on behalf of another person and
-                  Cani will notify whoever you choose.
+                  Yes. When you watch a product inside a shared room, every member of that room receives alerts when prices drop.
                 </p>
               </AccordionContent>
             </AccordionItem>
@@ -123,9 +116,7 @@ export function FAQ() {
               </AccordionTrigger>
               <AccordionContent className="origin-top">
                 <p className="pr-8 pt-3 text-gray-500">
-                  Cani works on most product pages out of the box. If a page
-                  needs special handling, our detection can be extended to
-                  support it.
+                  Search supports Flipkart, Amazon.in and Myntra in India, plus Amazon, Walmart and Best Buy in the US. You can paste any product link into a room.
                 </p>
               </AccordionContent>
             </AccordionItem>
@@ -140,8 +131,7 @@ export function FAQ() {
               </AccordionTrigger>
               <AccordionContent className="origin-top">
                 <p className="pr-8 pt-3 text-gray-500">
-                  Cani is free during early access. Pricing for advanced
-                  automation features will be introduced later.
+                  Cani is completely free to use during early access. Sign in with Google to create rooms and track items.
                 </p>
               </AccordionContent>
             </AccordionItem>
@@ -158,9 +148,7 @@ export function FAQ() {
               </AccordionTrigger>
               <AccordionContent className="origin-top">
                 <p className="pr-8 pt-3 text-gray-500">
-                  Anyone tired of manually refreshing product pages — restock
-                  hunters, deal seekers, and gift planners waiting on the right
-                  drop.
+                  Friends, roommates, couples and families deciding on purchases together who want to vote on options and catch deals without messy chat links.
                 </p>
               </AccordionContent>
             </AccordionItem>

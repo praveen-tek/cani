@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useAction, useConvexAuth } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { useTeamModal } from "../layout";
+import { useTeamModal } from "@/components/app-shell";
 import { detectCountry } from "@/lib/detect-country";
 import {
   Plus,
@@ -14,10 +14,12 @@ import {
   ArrowSquareOut,
   X,
   Buildings,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import { MarketSwitcher } from "@/components/market-switcher";
 import { Masonry } from "@/components/masonry";
 import { ProductCard } from "@/components/product-card";
+import { getErrorMessage } from "@/lib/rate-limit-error";
 
 export default function DashboardPage() {
   const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
@@ -27,7 +29,6 @@ export default function DashboardPage() {
 
   const { openCreateTeam } = useTeamModal();
   const addToTeam = useMutation(api.products.addToTeam);
-  const setCountryMutation = useMutation(api.profiles.setCountry);
   const autoSetCountryMutation = useMutation(api.profiles.autoSetCountry);
   const generateSuggestions = useAction(api.suggestions.generate);
 
@@ -38,6 +39,7 @@ export default function DashboardPage() {
     useState<Id<"suggestions"> | null>(null);
   const [addingToTeamId, setAddingToTeamId] = useState<Id<"teams"> | null>(null);
   const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
+  const [addToTeamError, setAddToTeamError] = useState<string | null>(null);
   const hasAutoSetCountryRef = useRef(false);
 
   useEffect(() => {
@@ -60,9 +62,7 @@ export default function DashboardPage() {
     try {
       await generateSuggestions();
     } catch (err: unknown) {
-      setGenerateError(
-        err instanceof Error ? err.message : "Failed to generate suggestions."
-      );
+      setGenerateError(getErrorMessage(err));
     } finally {
       setIsGenerating(false);
     }
@@ -73,6 +73,7 @@ export default function DashboardPage() {
     suggestionId: Id<"suggestions">
   ) => {
     setAddingToTeamId(teamId);
+    setAddToTeamError(null);
     try {
       const res = await addToTeam({
         teamId,
@@ -88,18 +89,17 @@ export default function DashboardPage() {
         setAddedFeedback(null);
       }, 1200);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to add product.");
+      setAddToTeamError(getErrorMessage(err));
     } finally {
       setAddingToTeamId(null);
     }
   };
 
   const currentCountry = (profile?.country === "IN" ? "IN" : "US") as "IN" | "US";
-  const currentLocale = currentCountry === "IN" ? "en-IN" : "en-US";
   const currentCurrency = currentCountry === "IN" ? "INR" : "USD";
 
   return (
-    <div className="max-w-6xl w-full mx-auto space-y-10 selection:bg-neutral-900 selection:text-white font-normal">
+    <div className="max-w-5xl w-full mx-auto space-y-10 selection:bg-neutral-900 selection:text-white font-normal">
       {/* Welcome Section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -109,7 +109,7 @@ export default function DashboardPage() {
           <p className="text-xs sm:text-sm text-neutral-500 mt-1 font-normal">
             Looking for:{" "}
             <span className="font-normal text-neutral-800">
-              &ldquo;{profile?.lookingFor}&rdquo;
+              &ldquo;{profile?.lookingFor || "Trending Drops"}&rdquo;
             </span>
           </p>
         </div>
@@ -118,9 +118,9 @@ export default function DashboardPage() {
           <button
             type="button"
             onClick={openCreateTeam}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-neutral-900 text-white text-xs font-normal hover:bg-neutral-800 transition cursor-pointer shrink-0"
+            className="h-10 inline-flex items-center gap-2 px-4 rounded-xl bg-neutral-900 text-white text-xs font-normal hover:bg-black transition cursor-pointer shrink-0"
           >
-            <Plus size={14} weight="light" />
+            <Plus size={16} weight="light" />
             <span>New Team</span>
           </button>
         </div>
@@ -138,7 +138,7 @@ export default function DashboardPage() {
         </div>
 
         {teams === undefined ? (
-          <div className="p-8 text-center bg-white rounded-2xl border border-neutral-200 text-xs font-normal text-neutral-400">
+          <div className="p-8 text-center bg-white rounded-2xl border border-neutral-200 text-xs font-normal text-neutral-500">
             Loading teams...
           </div>
         ) : teams.length === 0 ? (
@@ -150,9 +150,9 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={openCreateTeam}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-900 text-white text-xs font-normal hover:bg-black transition cursor-pointer"
+              className="h-9 inline-flex items-center gap-1.5 px-4 rounded-xl bg-neutral-900 text-white text-xs font-normal hover:bg-black transition cursor-pointer"
             >
-              <Plus size={12} weight="light" />
+              <Plus size={14} weight="light" />
               <span>Create your first team</span>
             </button>
           </div>
@@ -162,11 +162,11 @@ export default function DashboardPage() {
               <Link
                 key={team._id}
                 href={`/team?id=${team._id}`}
-                className="group bg-white rounded-2xl p-5 border border-neutral-200/80 hover:border-neutral-400 transition-all flex flex-col justify-between"
+                className="group bg-white rounded-2xl p-5 border border-neutral-200 hover:border-neutral-300 transition-all flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-2xs font-mono uppercase text-neutral-400 font-normal">
+                    <span className="text-2xs font-mono uppercase text-neutral-500 font-normal">
                       {team.role === "owner" ? "Owner" : "Member"}
                     </span>
                     <ArrowSquareOut
@@ -175,11 +175,11 @@ export default function DashboardPage() {
                       className="text-neutral-400 group-hover:text-neutral-900 transition"
                     />
                   </div>
-                  <h3 className="font-serif text-lg text-neutral-900 font-normal group-hover:underline">
+                  <h3 className="font-serif text-lg text-neutral-900 font-normal group-hover:underline truncate">
                     {team.name}
                   </h3>
                 </div>
-                <p className="text-2xs text-neutral-400 mt-4 font-normal">
+                <p className="text-2xs text-neutral-500 mt-4 font-normal">
                   Click to view voting board &rarr;
                 </p>
               </Link>
@@ -199,13 +199,13 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <MarketSwitcher />
+            <MarketSwitcher variant="pill" />
 
             <button
               type="button"
               onClick={handleGenerate}
               disabled={isGenerating}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-900 text-white text-xs font-normal hover:bg-black transition cursor-pointer disabled:opacity-50"
+              className="h-9 inline-flex items-center gap-2 px-4 rounded-xl bg-neutral-900 text-white text-xs font-normal hover:bg-black transition cursor-pointer disabled:opacity-50"
             >
               {isGenerating ? (
                 <>
@@ -246,7 +246,7 @@ export default function DashboardPage() {
               ]}
               getKey={(item) => String(item.id)}
               renderItem={(item) => (
-                <div className="bg-white rounded-2xl border border-neutral-200/80 p-4 space-y-3 animate-pulse">
+                <div className="bg-white rounded-2xl border border-neutral-200 p-4 space-y-3 animate-pulse">
                   <div className={`w-full ${item.height} bg-neutral-100 rounded-xl`} />
                   <div className="h-4 bg-neutral-100 rounded w-3/4" />
                   <div className="h-3 bg-neutral-100 rounded w-1/2" />
@@ -274,7 +274,10 @@ export default function DashboardPage() {
             renderItem={(item) => (
               <ProductCard
                 item={item}
-                onAddToTeam={() => setSelectedSuggestion(item._id)}
+                onAddToTeam={() => {
+                  setAddToTeamError(null);
+                  setSelectedSuggestion(item._id);
+                }}
                 fallbackCurrency={currentCurrency}
               />
             )}
@@ -284,8 +287,8 @@ export default function DashboardPage() {
 
       {/* Team Picker Dialog */}
       {selectedSuggestion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs font-normal">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-neutral-200 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 font-normal">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-neutral-200 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-serif text-lg text-neutral-900 font-normal">
                 Select Team Board
@@ -295,12 +298,20 @@ export default function DashboardPage() {
                 onClick={() => {
                   setSelectedSuggestion(null);
                   setAddedFeedback(null);
+                  setAddToTeamError(null);
                 }}
-                className="p-1 text-neutral-400 hover:text-neutral-900 transition cursor-pointer font-normal"
+                className="p-1 rounded-lg text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition cursor-pointer font-normal"
               >
                 <X size={16} weight="light" />
               </button>
             </div>
+
+            {addToTeamError && (
+              <div className="p-3 rounded-xl bg-red-50 text-red-700 text-xs flex items-center gap-2 border border-red-200 font-normal">
+                <WarningCircle size={16} weight="light" />
+                <span>{addToTeamError}</span>
+              </div>
+            )}
 
             {addedFeedback ? (
               <div className="p-4 rounded-xl bg-emerald-50 text-emerald-800 text-xs flex items-center gap-2 border border-emerald-200 font-normal">

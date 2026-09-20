@@ -54,7 +54,7 @@ export default function SubprocessorsPage() {
   return (
     <LegalLayout
       title="Authorized Subprocessors"
-      subtitle="To deliver reliable, real-time autonomous shopping alerts, Cani engages trusted third-party infrastructure partners."
+      subtitle="To deliver reliable shopping alerts and notifications, Cani engages trusted third-party infrastructure partners."
       lastUpdated="January 15, 2026"
     >
       <section className="space-y-4">

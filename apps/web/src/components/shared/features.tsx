@@ -17,13 +17,12 @@ export function Features() {
       <AnimatedContent distance={50} direction="vertical" delay={0.1}>
         <div className="max-w-2xl mb-24">
           <h2 className="font-serif text-5xl leading-tight text-gray-900">
-            Built to watch
+            Built to decide
             <br />
-            what you'd rather not.
+            together without chaos.
           </h2>
           <p className="text-gray-600 mt-4">
-            Cani handles the tabs, the refreshing, and the waiting — so you only
-            show up when it matters.
+            Cani puts store searches, shared links, and live votes in one place — so you pick the best item.
           </p>
         </div>
       </AnimatedContent>
@@ -53,7 +52,7 @@ export function Features() {
         >
           <div className="w-72 h-56 rounded-2xl bg-yellow-300 p-8 flex flex-col justify-between rotate-3 shadow-xl mt-10">
             <p className="font-caveat text-gray-900 text-3xl leading-snug">
-              Use responsibly. Restocks disappear fast.
+              One shared board for every link a friend sends.
             </p>
             <p className="text-gray-800/70 font-fraunces italic text-sm">
               Cani
@@ -69,7 +68,7 @@ export function Features() {
         >
           <div className="w-72 h-56 rounded-2xl bg-blue-700 p-8 flex flex-col justify-between -rotate-2 shadow-xl">
             <p className="font-bebas text-white text-3xl leading-snug tracking-wide">
-              Warning: notifications may feel oddly satisfying.
+              Warning: group votes will settle the argument.
             </p>
             <p className="text-white/70 font-fraunces italic text-sm">Cani</p>
           </div>
@@ -83,7 +82,7 @@ export function Features() {
         >
           <div className="w-72 h-56 rounded-2xl bg-purple-900 p-8 flex flex-col justify-between rotate-6 shadow-xl mt-6">
             <p className="font-mono2 text-pink-400 text-lg leading-snug">
-              Warning: may cause strong attachment to good deals.
+              Know the exact moment a watched price drops.
             </p>
             <p className="text-pink-300/70 font-fraunces italic text-sm">
               Cani
@@ -99,7 +98,7 @@ export function Features() {
         >
           <div className="w-72 h-56 rounded-2xl bg-gray-100 p-8 flex flex-col justify-between -rotate-3 shadow-xl">
             <p className="font-fraunces italic text-green-700 text-2xl leading-snug">
-              The shortcut to never missing a drop.
+              The simple way to vote on what to buy.
             </p>
             <p className="text-green-700/70 font-fraunces italic text-sm">
               Cani
@@ -115,7 +114,7 @@ export function Features() {
         >
           <div className="w-72 h-56 rounded-2xl bg-orange-500 p-8 flex flex-col justify-between rotate-2 shadow-xl mt-8">
             <p className="font-bungee text-white text-xl leading-snug">
-              Side effects include fewer regrets.
+              Search India and US stores in one place.
             </p>
             <p className="text-white/70 font-fraunces italic text-sm">Cani</p>
           </div>
@@ -129,7 +128,7 @@ export function Features() {
         >
           <div className="w-72 h-56 rounded-2xl bg-teal-600 p-8 flex flex-col justify-between -rotate-5 shadow-xl">
             <p className="font-kalam text-white text-2xl leading-snug">
-              Caution: watching may become addictive.
+              Invite your friends by link or by email.
             </p>
             <p className="text-white/70 font-fraunces italic text-sm">Cani</p>
           </div>
@@ -143,7 +142,7 @@ export function Features() {
         >
           <div className="w-72 h-56 rounded-2xl bg-rose-200 p-8 flex flex-col justify-between rotate-4 shadow-xl mt-4">
             <p className="font-bricolage text-rose-900 text-2xl leading-snug">
-              Not responsible for sudden restock joy.
+              No more lost links in messy group chats.
             </p>
             <p className="text-rose-900/70 font-fraunces italic text-sm">
               Cani

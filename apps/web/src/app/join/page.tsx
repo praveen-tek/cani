@@ -8,6 +8,7 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { ConvexError } from "convex/values";
 import { api } from "../../../convex/_generated/api";
+import { getErrorMessage } from "@/lib/rate-limit-error";
 import {
   Buildings,
   Users,
@@ -64,13 +65,7 @@ function JoinPageInner() {
       const res = await acceptInvite({ code });
       router.push(`/team?id=${res.teamId}`);
     } catch (err: unknown) {
-      const msg =
-        err instanceof ConvexError
-          ? (err.data as string)
-          : err instanceof Error
-          ? err.message
-          : "Failed to join room.";
-      setJoinError(msg);
+      setJoinError(getErrorMessage(err));
       setIsJoining(false);
     }
   };
@@ -220,7 +215,7 @@ function JoinPageInner() {
       </main>
 
       <footer className="px-8 py-4 text-center text-2xs text-neutral-400 border-t border-neutral-200/60 bg-white/50 font-normal">
-        <span>© {new Date().getFullYear()} Cani Inc. Autonomous Shopping Assistant</span>
+        <span>© {new Date().getFullYear()} Cani Inc. Shop with friends, decide together</span>
       </footer>
     </div>
   );

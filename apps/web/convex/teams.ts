@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { requireMember } from "./lib/membership";
+import { enforce } from "./lib/limits";
 
 export const create = mutation({
   args: {
@@ -18,6 +19,18 @@ export const create = mutation({
     if (trimmedName.length < 1 || trimmedName.length > 50) {
       throw new ConvexError("Team name must be between 1 and 50 characters.");
     }
+
+    const ownedTeams = await ctx.db
+      .query("teams")
+      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+      .filter((q) => q.eq(q.field("archivedAt"), undefined))
+      .collect();
+
+    if (ownedTeams.length >= 10) {
+      throw new ConvexError("You have reached the limit of 10 rooms.");
+    }
+
+    await enforce(ctx, "roomCreateHourly", { key: userId });
 
     const teamId = await ctx.db.insert("teams", {
       name: trimmedName,

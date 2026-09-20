@@ -23,89 +23,87 @@ interface Scenario {
 
 const SCENARIOS: Scenario[] = [
   {
-    id: "salomon",
-    name: "Salomon XT-6",
-    store: "SSENSE",
-    storeDomain: "ssense.com/en-us/men/product/salomon/xt-6-black",
-    productName: "Salomon XT-6 'Black / Phantom'",
-    originalPrice: "$200",
-    targetPrice: "$200 (Restock)",
-    sizeOption: "US 10 / UK 9.5",
-    prompt: "Notify me immediately when size US 10 comes back in stock. Don't trigger on other sizes.",
-    parsedConditions: ["Size: US 10", "Trigger: Restock only", "Ignore: Other sizes"],
-    scanLog: [
-      "Target page reached: SSENSE listing active",
-      "Size 10 selector state changed: [In Stock]",
-      "Cart availability verified: 3 units remaining",
-      "Matches criteria with 100% confidence",
-    ],
-    alertHeadline: "Size US 10 is back in stock at SSENSE",
-    alertDetails: "Only 3 pairs remaining. Ready for 1-click checkout.",
-    badgeText: "Back in Stock",
-  },
-  {
-    id: "sony",
-    name: "Sony WH-1000XM5",
-    store: "Amazon",
-    storeDomain: "amazon.com/dp/B09XS7JWHH/sony-wh1000xm5-silver",
+    id: "headphones",
+    name: "Headphones",
+    store: "Flipkart",
+    storeDomain: "flipkart.com/search?q=wireless+headphones",
     productName: "Sony WH-1000XM5 Wireless Headphones",
-    originalPrice: "$399",
-    targetPrice: "$279 (-30%)",
-    prompt: "Track price on Silver edition and ping me if it drops below $300 from verified sellers.",
-    parsedConditions: ["Price: < $300", "Color: Silver", "Seller: Sold by Amazon"],
+    originalPrice: "₹29,990",
+    targetPrice: "₹24,990 (Sale)",
+    prompt: "noise cancelling headphones under 25000",
+    parsedConditions: ["Market: India", "Stores: Flipkart, Amazon.in, Myntra", "Sort: On sale first"],
     scanLog: [
-      "Monitoring verified merchant listings",
-      "Price update detected: $399.99 ➔ $279.99 (-30%)",
-      "Seller confirmed: Shipped & sold by Amazon",
-      "Target threshold satisfied (< $300)",
+      "Search query: noise cancelling headphones under 25000",
+      "Stores searched: Flipkart, Amazon.in, Myntra",
+      "Price drop detected on Sony WH-1000XM5: ₹24,990",
+      "Saved to shared room and alert sent to members",
     ],
-    alertHeadline: "Sony WH-1000XM5 dropped to $279",
-    alertDetails: "Price dropped by $120. Sold directly by Amazon.",
-    badgeText: "30% Price Drop",
+    alertHeadline: "Sony WH-1000XM5 dropped to ₹24,990",
+    alertDetails: "Price dropped by ₹5,000 on Flipkart. View details in your room.",
+    badgeText: "Price Drop",
   },
   {
-    id: "arket",
-    name: "Arket Knitwear",
-    store: "ARKET",
-    storeDomain: "arket.com/en_usd/women/knitwear/cashmere-crew-camel",
-    productName: "Oversized Cashmere Crew-Neck (Camel)",
-    originalPrice: "$260",
-    targetPrice: "$182 (Sale)",
-    sizeOption: "Size Medium",
-    prompt: "Ping me if the Camel colorway goes on sale or restocks in Medium.",
-    parsedConditions: ["Color: Camel Heather", "Size: Medium", "Trigger: Sale / Restock"],
+    id: "shoes",
+    name: "Running Shoes",
+    store: "Myntra",
+    storeDomain: "myntra.com/running-shoes",
+    productName: "Nike Pegasus 40 Road Running Shoes",
+    originalPrice: "₹11,495",
+    targetPrice: "₹7,995 (30% off)",
+    prompt: "running shoes under 8000 on sale",
+    parsedConditions: ["Market: India", "Stores: Myntra, Flipkart, Amazon.in", "Sort: Rating high to low"],
     scanLog: [
-      "Variant inventory monitored",
-      "Markdown applied: $260 ➔ $182",
-      "Size Medium confirmed active in inventory",
-      "Matches watch rule: Camel in Medium",
+      "Search query: running shoes under 8000 on sale",
+      "Stores searched: Myntra, Flipkart, Amazon.in",
+      "Found Nike Pegasus 40 at 30% discount",
+      "Shared to room for group voting",
     ],
-    alertHeadline: "Arket Cashmere Knit marked down to $182",
-    alertDetails: "Camel size M is available with complimentary shipping.",
-    badgeText: "Sale & Restock",
+    alertHeadline: "Nike Pegasus 40 is 30% off on Myntra",
+    alertDetails: "Now ₹7,995 down from ₹11,495. Ready for group review.",
+    badgeText: "Deal Alert",
+  },
+  {
+    id: "espresso",
+    name: "Espresso Maker",
+    store: "Amazon",
+    storeDomain: "amazon.com/dp/B08Y5DNX3W",
+    productName: "De'Longhi Dedica Deluxe Espresso Machine",
+    originalPrice: "$299",
+    targetPrice: "$219 (Price Drop)",
+    prompt: "espresso machine under 250 with steam wand",
+    parsedConditions: ["Market: US", "Stores: Amazon, Walmart, Best Buy", "Sort: Price low to high"],
+    scanLog: [
+      "Search query: espresso machine under 250 with steam wand",
+      "Stores searched: Amazon, Walmart, Best Buy",
+      "New discount found at $219 on Amazon",
+      "Alert sent to room members",
+    ],
+    alertHeadline: "De'Longhi Espresso Machine dropped to $219",
+    alertDetails: "Discount detected on Amazon. View product link on the store.",
+    badgeText: "Price Drop",
   },
 ];
 
 const STEPS = [
   {
     step: "01",
-    title: "Pin a page",
-    description: "Drop in any product URL you want Cani to keep an eye on.",
+    title: "Search",
+    description: "Say what you want in plain words across India or US stores.",
   },
   {
     step: "02",
-    title: "State your intent",
-    description: "Say it in plain language — restock, price drop, or specific size.",
+    title: "Add to a room",
+    description: "Save items from search or paste any product link onto your board.",
   },
   {
     step: "03",
-    title: "Agent verifies",
-    description: "Cani monitors changes and checks whether it matches your criteria.",
+    title: "Vote together",
+    description: "Invite friends to vote up or down with real-time score updates.",
   },
   {
     step: "04",
-    title: "Get notified",
-    description: "The moment it's real, you're alerted with direct 1-click checkout.",
+    title: "Get alerts",
+    description: "Watch price drops and new launches in the app and by email.",
   },
 ];
 
@@ -135,7 +133,7 @@ export function HowItWorks() {
                 actually works.
               </h2>
               <p className="text-gray-600 text-base sm:text-lg mt-3 max-w-xl">
-                Four simple steps between you and never manually checking a page again.
+                Four simple steps from finding products to deciding together with friends.
               </p>
             </div>
 
@@ -246,45 +244,7 @@ export function HowItWorks() {
                 >
                   <div className="border border-gray-100 rounded-xl p-6">
                     <p className="text-xs text-gray-400 uppercase tracking-wider mb-3">
-                      Pinned Product Link
-                    </p>
-                    <div className="flex items-center justify-between gap-4 py-2 border-b border-gray-100 mb-4">
-                      <span className="font-mono text-xs text-gray-600 truncate">
-                        https://{activeScenario.storeDomain}
-                      </span>
-                      <span className="text-xs text-gray-900 font-medium shrink-0">
-                        {activeScenario.store}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-serif text-lg text-gray-900">
-                          {activeScenario.productName}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Current listing: {activeScenario.originalPrice} {activeScenario.sizeOption ? `• ${activeScenario.sizeOption}` : ""}
-                        </p>
-                      </div>
-                      <span className="text-xs text-gray-600 border border-gray-200 rounded-full px-3 py-1">
-                        Watching
-                      </span>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {activeStep === 2 && (
-                <motion.div
-                  key="step-2"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.25 }}
-                  className="w-full max-w-2xl"
-                >
-                  <div className="border border-gray-100 rounded-xl p-6">
-                    <p className="text-xs text-gray-400 uppercase tracking-wider mb-3">
-                      Natural Language Instruction
+                      Search Query & Filters
                     </p>
                     <p className="font-serif text-xl text-gray-900 italic mb-6">
                       "{activeScenario.prompt}"
@@ -303,6 +263,44 @@ export function HowItWorks() {
                 </motion.div>
               )}
 
+              {activeStep === 2 && (
+                <motion.div
+                  key="step-2"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.25 }}
+                  className="w-full max-w-2xl"
+                >
+                  <div className="border border-gray-100 rounded-xl p-6">
+                    <p className="text-xs text-gray-400 uppercase tracking-wider mb-3">
+                      Product Added to Room
+                    </p>
+                    <div className="flex items-center justify-between gap-4 py-2 border-b border-gray-100 mb-4">
+                      <span className="font-mono text-xs text-gray-600 truncate">
+                        https://{activeScenario.storeDomain}
+                      </span>
+                      <span className="text-xs text-gray-900 font-medium shrink-0">
+                        {activeScenario.store}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-serif text-lg text-gray-900">
+                          {activeScenario.productName}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Current listing: {activeScenario.originalPrice}
+                        </p>
+                      </div>
+                      <span className="text-xs text-gray-600 border border-gray-200 rounded-full px-3 py-1">
+                        In Room
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               {activeStep === 3 && (
                 <motion.div
                   key="step-3"
@@ -315,9 +313,9 @@ export function HowItWorks() {
                   <div className="border border-gray-100 rounded-xl p-6">
                     <div className="flex items-center justify-between mb-4">
                       <p className="text-xs text-gray-400 uppercase tracking-wider">
-                        Autonomous Verification
+                        Live Room Voting
                       </p>
-                      <span className="text-xs text-green-600 font-mono">● Verified Match</span>
+                      <span className="text-xs text-green-600 font-mono">● Active Room</span>
                     </div>
                     <div className="space-y-2 text-xs font-mono text-gray-600">
                       {activeScenario.scanLog.map((log, index) => (
@@ -343,7 +341,7 @@ export function HowItWorks() {
                   <div className="border border-gray-100 rounded-xl p-6">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-xs text-gray-400 uppercase tracking-wider">
-                        Alert Notification
+                        Price & Launch Alert
                       </p>
                       <span className="text-xs text-gray-900 border border-gray-200 rounded-full px-2.5 py-0.5">
                         {activeScenario.badgeText}
@@ -360,10 +358,10 @@ export function HowItWorks() {
                         type="button"
                         className="bg-black text-white text-xs font-medium px-4 py-2 rounded-full hover:bg-gray-800 transition cursor-pointer"
                       >
-                        Buy Now
+                        View Store
                       </button>
                       <span className="text-xs text-gray-400">
-                        or reply to adjust this watch
+                        links out directly to the store listing
                       </span>
                     </div>
                   </div>
@@ -390,6 +388,7 @@ export function HowItWorks() {
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
               referrerPolicy="strict-origin-when-cross-origin"
               allowFullScreen
+              loading="lazy"
               className="w-full h-full"
             ></iframe>
           </div>

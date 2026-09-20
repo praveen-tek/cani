@@ -11,6 +11,39 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { getMarket } from "./lib/markets";
 import { requireMember } from "./lib/membership";
+import {
+  enforce,
+  spendFirecrawl,
+  estimateAddByUrlCost,
+} from "./lib/limits";
+
+export const getExistingProductByUrl = internalQuery({
+  args: {
+    teamId: v.id("teams"),
+    url: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("products")
+      .withIndex("by_team_and_url", (q) =>
+        q.eq("teamId", args.teamId).eq("url", args.url)
+      )
+      .unique();
+  },
+});
+
+export const getRoomProductCount = internalQuery({
+  args: {
+    teamId: v.id("teams"),
+  },
+  handler: async (ctx, args) => {
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_team", (q) => q.eq("teamId", args.teamId))
+      .collect();
+    return products.length;
+  },
+});
 
 export const checkMembership = internalQuery({
   args: {
@@ -99,7 +132,7 @@ export const addByUrl = action({
   handler: async (
     ctx,
     args
-  ): Promise<{ productId: string; alreadyExisted: boolean }> => {
+  ): Promise<{ productId: string; alreadyExisted: boolean; scraped: boolean }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new ConvexError("Unauthenticated");
@@ -123,6 +156,29 @@ export const addByUrl = action({
       throw new ConvexError("Please provide a valid HTTP or HTTPS product link.");
     }
 
+    const urlString = validUrl.toString();
+
+    const existing = await ctx.runQuery(
+      internal.products.getExistingProductByUrl,
+      {
+        teamId: args.teamId,
+        url: urlString,
+      }
+    );
+    if (existing) {
+      return { productId: existing._id, alreadyExisted: true, scraped: true };
+    }
+
+    const productCount = await ctx.runQuery(
+      internal.products.getRoomProductCount,
+      {
+        teamId: args.teamId,
+      }
+    );
+    if (productCount >= 100) {
+      throw new ConvexError("This room has reached the maximum of 100 products.");
+    }
+
     const cleanHostname = validUrl.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
     let title = cleanHostname;
     let imageUrl: string | undefined;
@@ -130,10 +186,15 @@ export const addByUrl = action({
     let salePrice: number | undefined;
     let currency: string | undefined;
     const source = cleanHostname;
+    let scraped = false;
 
     const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
     if (firecrawlApiKey) {
       try {
+        await enforce(ctx, "addByUrlHourly", { key: userId });
+        await enforce(ctx, "addByUrlDaily", { key: userId });
+        await spendFirecrawl(ctx, { cost: estimateAddByUrlCost() });
+
         const profile = await ctx.runQuery(internal.products.getProfileForUser, {
           userId,
         });
@@ -147,7 +208,7 @@ export const addByUrl = action({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            url: validUrl.toString(),
+            url: urlString,
             formats: [
               {
                 type: "json",
@@ -181,29 +242,31 @@ export const addByUrl = action({
 
         if (res.ok) {
           const json = await res.json();
-          const scraped =
+          const scrapedData =
             json?.data?.json ||
             json?.data?.extract ||
             json?.data?.formats?.json ||
             json?.json ||
             {};
 
-          if (typeof scraped.title === "string" && scraped.title.trim().length >= 2) {
-            title = scraped.title.trim();
+          if (typeof scrapedData.title === "string" && scrapedData.title.trim().length >= 2) {
+            title = scrapedData.title.trim();
+            scraped = true;
           } else if (typeof json?.data?.metadata?.title === "string" && json.data.metadata.title.trim()) {
             title = json.data.metadata.title.trim();
+            scraped = true;
           }
 
-          if (typeof scraped.imageUrl === "string" && scraped.imageUrl.trim()) {
-            imageUrl = scraped.imageUrl.trim();
+          if (typeof scrapedData.imageUrl === "string" && scrapedData.imageUrl.trim()) {
+            imageUrl = scrapedData.imageUrl.trim();
           } else if (json?.data?.metadata?.ogImage || json?.data?.metadata?.image) {
             imageUrl = json.data.metadata.ogImage || json.data.metadata.image;
           }
 
           const parsedPrice =
-            typeof scraped.price === "number" && !isNaN(scraped.price) ? scraped.price : undefined;
+            typeof scrapedData.price === "number" && !isNaN(scrapedData.price) ? scrapedData.price : undefined;
           const parsedSalePrice =
-            typeof scraped.salePrice === "number" && !isNaN(scraped.salePrice) ? scraped.salePrice : undefined;
+            typeof scrapedData.salePrice === "number" && !isNaN(scrapedData.salePrice) ? scrapedData.salePrice : undefined;
 
           if (parsedPrice !== undefined && parsedSalePrice !== undefined) {
             if (parsedSalePrice < parsedPrice) {
@@ -220,26 +283,32 @@ export const addByUrl = action({
             price = parsedPrice;
           }
 
-          if (typeof scraped.currency === "string" && scraped.currency.trim()) {
-            currency = scraped.currency.trim();
+          if (typeof scrapedData.currency === "string" && scrapedData.currency.trim()) {
+            currency = scrapedData.currency.trim();
           }
         }
       } catch {
-        // Fallback already prepared with hostname as title
+        // Fallback already prepared with hostname as title (scraped: false)
       }
     }
 
-    return await ctx.runMutation(internal.products.insertProductInternal, {
+    const inserted = await ctx.runMutation(internal.products.insertProductInternal, {
       teamId: args.teamId,
       addedBy: userId,
       title,
-      url: validUrl.toString(),
+      url: urlString,
       imageUrl,
       price,
       salePrice,
       currency: currency || "USD",
       source,
     });
+
+    return {
+      productId: inserted.productId,
+      alreadyExisted: inserted.alreadyExisted,
+      scraped,
+    };
   },
 });
 
@@ -260,6 +329,17 @@ export const addToTeam = mutation({
   },
   handler: async (ctx, args) => {
     const { userId } = await requireMember(ctx, args.teamId);
+
+    const roomProducts = await ctx.db
+      .query("products")
+      .withIndex("by_team", (q) => q.eq("teamId", args.teamId))
+      .collect();
+
+    if (roomProducts.length >= 100) {
+      throw new ConvexError("This room has reached the maximum of 100 products.");
+    }
+
+    await enforce(ctx, "addToRoomHourly", { key: userId });
 
     let title = "";
     let url = "";

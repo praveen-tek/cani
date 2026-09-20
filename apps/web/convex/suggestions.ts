@@ -10,6 +10,11 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { getMarket, StoreConfig } from "./lib/markets";
 import {
+  enforce,
+  spendFirecrawl,
+  estimateDiscoverCost,
+} from "./lib/limits";
+import {
   dedupeProducts,
   extractHostname,
   extractProductsFromSearchResult,
@@ -140,17 +145,8 @@ export const generate = action({
       );
     }
 
-    if (
-      profile.lastSuggestedAt &&
-      Date.now() - profile.lastSuggestedAt < 10 * 60 * 1000
-    ) {
-      const waitMinutes = Math.ceil(
-        (10 * 60 * 1000 - (Date.now() - profile.lastSuggestedAt)) / 60000
-      );
-      throw new ConvexError(
-        `Suggestions were recently generated. Please wait ${waitMinutes} minute${waitMinutes > 1 ? "s" : ""} before generating again.`
-      );
-    }
+    await enforce(ctx, "discoverDaily", { key: userId });
+    await spendFirecrawl(ctx, { cost: estimateDiscoverCost() });
 
     const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlApiKey) {

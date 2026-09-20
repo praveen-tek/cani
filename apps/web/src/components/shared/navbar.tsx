@@ -212,10 +212,10 @@ export default function Navbar() {
         </div>
 
         <Link href="/" className="flex-1 text-center group cursor-pointer block">
-          <h1 className="font-serif text-4xl text-gray-900 tracking-tight transition-transform duration-200 group-hover:scale-102">
+          <span className="font-serif text-4xl text-gray-900 tracking-tight transition-transform duration-200 group-hover:scale-102 block">
             Cani
-          </h1>
-          <p className="text-sm text-gray-600">Agentic Way of Shopping</p>
+          </span>
+          <p className="text-sm text-gray-600">Shop with friends, decide together</p>
         </Link>
 
         <div className="flex items-center gap-6 flex-1 justify-end">
@@ -299,46 +299,46 @@ export default function Navbar() {
                   About Cani
                 </span>
                 <h2 className="font-serif text-3xl text-gray-900 leading-tight">
-                  Shopping on your terms.
+                  Shop together, decide easily.
                 </h2>
               </div>
 
               <p className="text-sm text-gray-600 leading-relaxed mb-6">
-                Cani is an autonomous shopping assistant designed to replace manual tab-refreshing, price checking, and missing out on limited product drops.
+                Cani is a shared shopping board. Search stores, add products to a room, vote with friends and get alerts when prices drop.
               </p>
 
               <div className="space-y-4 border-t border-b border-gray-100 py-6 mb-6">
                 <div>
                   <h4 className="font-serif text-base text-gray-900">
-                    Zero spam, 100% intent
+                    Search across stores
                   </h4>
                   <p className="text-xs text-gray-500 mt-0.5 leading-normal">
-                    You only hear from Cani when your exact condition (specific size, color, or price drop threshold) is validated.
+                    Find products from Flipkart, Amazon, Myntra, Walmart and Best Buy in one simple search.
                   </p>
                 </div>
 
                 <div>
                   <h4 className="font-serif text-base text-gray-900">
-                    Works across any storefront
+                    Collaborate in rooms
                   </h4>
                   <p className="text-xs text-gray-500 mt-0.5 leading-normal">
-                    No store partnerships or APIs required. Pin any link from Shopify, Amazon, SSENSE, Nike, or local boutiques.
+                    Create a shared room, invite friends by link or email, and vote on items with live score updates.
                   </p>
                 </div>
 
                 <div>
                   <h4 className="font-serif text-base text-gray-900">
-                    Privacy by default
+                    Price and launch alerts
                   </h4>
                   <p className="text-xs text-gray-500 mt-0.5 leading-normal">
-                    We only monitor the URLs you ask us to track. No browser history scraping and no selling your shopping data.
+                    Watch products for price drops or searches for new launches, with alerts in the app and by email.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between">
                 <p className="text-xs text-gray-400 font-mono">
-                  cani.shopping // v1.0
+                  cani.shopping // early access
                 </p>
                 <button
                   type="button"
@@ -384,58 +384,58 @@ export default function Navbar() {
 
               <div className="mb-6">
                 <span className="text-xs font-mono uppercase tracking-wider text-gray-400 block mb-2">
-                  Features // Autonomous Agent
+                  Features // Shared Shopping
                 </span>
                 <h2 className="font-serif text-3xl text-gray-900 leading-tight">
-                  Built to watch what you'd rather not.
+                  Everything you need to decide together.
                 </h2>
               </div>
 
               <p className="text-sm text-gray-600 leading-relaxed mb-6">
-                Cani combines background browser automation, visual diffing, and intent reasoning into one agent.
+                Cani brings search, shared rooms, group voting, and price drop alerts into one place.
               </p>
 
               <div className="space-y-4 border-t border-b border-gray-100 py-6 mb-6">
                 <div>
                   <h4 className="font-serif text-base text-gray-900">
-                    Autonomous SKU & Restock Tracking
+                    Multi-Store Product Search
                   </h4>
                   <p className="text-xs text-gray-500 mt-0.5 leading-normal">
-                    Monitors specific sizes, colors, and variant buttons directly in the DOM so you never miss limited drops.
+                    Search stores in India and the US with prices, discounts and ratings in your local currency.
                   </p>
                 </div>
 
                 <div>
                   <h4 className="font-serif text-base text-gray-900">
-                    Real Price Drop Intelligence
+                    Shared Rooms & Live Voting
                   </h4>
                   <p className="text-xs text-gray-500 mt-0.5 leading-normal">
-                    Filters out inflated MSRP tricks, fake discounts, and unverified 3rd-party sellers.
+                    Add items from search or paste links from any store. Vote up or down with live score totals.
                   </p>
                 </div>
 
                 <div>
                   <h4 className="font-serif text-base text-gray-900">
-                    Natural Language Intent
+                    Scheduled Price & Launch Alerts
                   </h4>
                   <p className="text-xs text-gray-500 mt-0.5 leading-normal">
-                    No coding or selector pickers. Simply state what you're looking for in plain English.
+                    Set watches to check product prices and new launches on a schedule, delivered via email.
                   </p>
                 </div>
 
                 <div>
                   <h4 className="font-serif text-base text-gray-900">
-                    Instant 1-Click Checkout Handoff
+                    Direct Store Links
                   </h4>
                   <p className="text-xs text-gray-500 mt-0.5 leading-normal">
-                    Alerts include direct checkout links with your selected variant ready to buy immediately.
+                    Every product card links directly to the retailer so you buy safely on the store's own site.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between">
                 <p className="text-xs text-gray-400 font-mono">
-                  Autonomous shopping engine
+                  Shared shopping board
                 </p>
                 <button
                   type="button"

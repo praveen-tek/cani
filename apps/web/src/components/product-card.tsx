@@ -2,13 +2,18 @@
 
 import { useState } from "react";
 import {
-  ArrowSquareOut,
+  ArrowUpRight,
+  Check,
+  Eye,
   ImageSquare,
   Plus,
   Star,
   Tag,
 } from "@phosphor-icons/react";
+import { useQuery, useAction } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { upgradeImageUrl } from "@/lib/image-url";
+import { getErrorMessage } from "@/lib/rate-limit-error";
 
 export interface ProductCardItem {
   _id?: string;
@@ -53,6 +58,37 @@ export function ProductCard({
     () => upgradeImageUrl(item.imageUrl) || item.imageUrl
   );
   const [hasError, setHasError] = useState(false);
+  const [isWatchingLoading, setIsWatchingLoading] = useState(false);
+  const [watchError, setWatchError] = useState<string | null>(null);
+
+  const existingWatch = useQuery(api.monitors.getWatchStatusForUrl, {
+    url: item.url,
+  });
+  const createProductWatch = useAction(api.monitors.createProductWatch);
+  const removeMonitor = useAction(api.monitors.remove);
+
+  const handleToggleWatch = async () => {
+    setIsWatchingLoading(true);
+    setWatchError(null);
+    try {
+      if (existingWatch) {
+        await removeMonitor({ monitorId: existingWatch._id });
+      } else {
+        await createProductWatch({
+          url: item.url,
+          title: item.title,
+          initialPrice: item.price,
+          initialSalePrice: item.salePrice,
+        });
+      }
+    } catch (e) {
+      const msg = getErrorMessage(e);
+      setWatchError(msg);
+      setTimeout(() => setWatchError(null), 4000);
+    } finally {
+      setIsWatchingLoading(false);
+    }
+  };
 
   const handleImageError = () => {
     if (currentSrc && item.imageUrl && currentSrc !== item.imageUrl) {
@@ -68,7 +104,7 @@ export function ProductCard({
   const formattedOrig = formatPrice(item.price, itemCurrency, itemLocale);
 
   return (
-    <div className="bg-white rounded-2xl border border-neutral-200/80 overflow-hidden hover:border-neutral-300 transition-all flex flex-col justify-between font-normal">
+    <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden hover:border-neutral-400 transition-colors flex flex-col justify-between font-normal shadow-none">
       <div>
         <div
           className={`w-full bg-neutral-100 rounded-t-2xl overflow-hidden ${
@@ -95,18 +131,18 @@ export function ProductCard({
 
         <div className="p-4 space-y-2">
           <div className="flex items-center justify-between text-2xs">
-            <span className="font-mono text-neutral-400 uppercase font-normal truncate max-w-[120px]">
+            <span className="font-mono text-neutral-500 uppercase font-normal truncate max-w-[120px]">
               {item.source}
             </span>
             <div className="flex items-center gap-2 shrink-0">
               {typeof item.rating === "number" && (
                 <span className="inline-flex items-center gap-1 font-mono text-neutral-600 font-normal">
-                  <Star size={12} weight="light" className="text-amber-500" />
+                  <Star size={12} weight="light" className="text-neutral-700" />
                   <span>{item.rating.toFixed(1)}</span>
                 </span>
               )}
               {item.onSale && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 font-normal border border-rose-200">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-800 font-normal border border-neutral-200">
                   <Tag size={10} weight="light" />
                   <span>ON SALE</span>
                 </span>
@@ -117,7 +153,7 @@ export function ProductCard({
           <a
             href={item.url}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="font-serif text-sm text-neutral-900 font-normal line-clamp-2 hover:underline block"
           >
             {item.title}
@@ -136,7 +172,7 @@ export function ProductCard({
                   {formattedSale}
                 </span>
                 {formattedOrig && (
-                  <span className="text-xs text-neutral-400 line-through font-mono font-normal">
+                  <span className="text-xs text-neutral-500 line-through font-mono font-normal">
                     {formattedOrig}
                   </span>
                 )}
@@ -146,7 +182,7 @@ export function ProductCard({
                 {formattedOrig}
               </span>
             ) : (
-              <span className="text-xs text-neutral-400 font-mono font-normal">
+              <span className="text-xs text-neutral-500 font-mono font-normal">
                 Check site for price
               </span>
             )}
@@ -154,24 +190,58 @@ export function ProductCard({
         </div>
       </div>
 
-      <div className="p-4 pt-0 border-t border-neutral-100 mt-2 flex items-center justify-between gap-2 font-normal">
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noreferrer"
-          className="text-2xs text-neutral-500 hover:text-neutral-900 underline transition font-normal"
-        >
-          View product
-        </a>
+      <div className="p-4 pt-0 border-t border-neutral-100 mt-2 flex flex-col gap-1.5 font-normal">
+        <div className="flex items-center justify-between gap-1.5">
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-2xs text-neutral-500 hover:text-neutral-900 underline transition font-normal"
+          >
+            <span>View</span>
+            <ArrowUpRight size={12} weight="light" />
+          </a>
 
-        <button
-          type="button"
-          onClick={onAddToTeam}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-2xs font-normal transition cursor-pointer"
-        >
-          <Plus size={12} weight="light" />
-          <span>Add to team</span>
-        </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleToggleWatch}
+              disabled={isWatchingLoading}
+              className={`h-8 inline-flex items-center gap-1 px-2.5 rounded-xl text-2xs font-normal transition cursor-pointer ${
+                existingWatch
+                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                  : "bg-neutral-100 hover:bg-neutral-200 text-neutral-800"
+              }`}
+              title={existingWatch ? "Watching price drops (click to stop)" : "Watch price drops with Firecrawl"}
+            >
+              {existingWatch ? (
+                <>
+                  <Check size={12} weight="light" className="text-emerald-700" />
+                  <span>Watching</span>
+                </>
+              ) : (
+                <>
+                  <Eye size={12} weight="light" />
+                  <span>Watch</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onAddToTeam}
+              className="h-8 inline-flex items-center gap-1 px-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-2xs font-normal transition cursor-pointer"
+            >
+              <Plus size={12} weight="light" />
+              <span>Room</span>
+            </button>
+          </div>
+        </div>
+        {watchError && (
+          <p className="text-2xs text-neutral-500 text-right font-normal">
+            {watchError}
+          </p>
+        )}
       </div>
     </div>
   );

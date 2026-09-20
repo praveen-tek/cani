@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -10,11 +10,33 @@ import { MarketSwitcher } from "@/components/market-switcher";
 import { Masonry } from "@/components/masonry";
 import { ProductCard, ProductCardItem } from "@/components/product-card";
 import {
+  PromptInput,
+  PromptInputTextarea,
+  PromptInputActions,
+  PromptInputAction,
+} from "@/components/ui/prompt-input";
+import { PromptSuggestion } from "@/components/ui/prompt-suggestion";
+import { Loader } from "@/components/ui/loader";
+import { TextShimmer } from "@/components/ui/text-shimmer";
+import { Source, SourceTrigger, SourceContent } from "@/components/ui/source";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import {
+  ArrowCounterClockwise,
+  ArrowUp,
   Check,
-  MagnifyingGlass,
+  Eye,
   Plus,
+  Stop,
+  WarningCircle,
   X,
 } from "@phosphor-icons/react";
+import { getErrorMessage, getRetryAfterMs } from "@/lib/rate-limit-error";
 
 interface AlsoWorthALookItem {
   title: string;
@@ -45,14 +67,12 @@ const US_EXAMPLE_CHIPS = [
 ];
 
 const SKELETON_ITEMS = [
-  { id: 1, height: "h-[220px]" },
-  { id: 2, height: "h-[300px]" },
-  { id: 3, height: "h-[260px]" },
-  { id: 4, height: "h-[340px]" },
-  { id: 5, height: "h-[240px]" },
-  { id: 6, height: "h-[290px]" },
-  { id: 7, height: "h-[320px]" },
-  { id: 8, height: "h-[250px]" },
+  { id: 1, ratio: "aspect-[4/3]" },
+  { id: 2, ratio: "aspect-video" },
+  { id: 3, ratio: "aspect-[4/3]" },
+  { id: 4, ratio: "aspect-[3/2]" },
+  { id: 5, ratio: "aspect-video" },
+  { id: 6, ratio: "aspect-[4/3]" },
 ];
 
 function DiscoverPageInner() {
@@ -60,11 +80,49 @@ function DiscoverPageInner() {
   const teams = useQuery(api.teams.listMine);
   const searchAction = useAction(api.discover.search);
   const addToTeamMutation = useMutation(api.products.addToTeam);
+  const createSearchWatch = useAction(api.monitors.createSearchWatch);
+  const removeMonitor = useAction(api.monitors.remove);
 
   const [inputQuery, setInputQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [burstCountdown, setBurstCountdown] = useState<number | null>(null);
   const [data, setData] = useState<DiscoverResponse | null>(null);
+  const [isWatchingSearchLoading, setIsWatchingSearchLoading] = useState(false);
+
+  useEffect(() => {
+    if (burstCountdown === null || burstCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setBurstCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [burstCountdown]);
+
+  const existingSearchWatch = useQuery(api.monitors.getWatchStatusForQuery, {
+    query: data?.query || "",
+  });
+
+  const handleToggleSearchWatch = async () => {
+    if (!data?.query) return;
+    setIsWatchingSearchLoading(true);
+    try {
+      if (existingSearchWatch) {
+        await removeMonitor({ monitorId: existingSearchWatch._id });
+      } else {
+        await createSearchWatch({ query: data.query });
+      }
+    } catch (e) {
+      setSearchError(getErrorMessage(e));
+    } finally {
+      setIsWatchingSearchLoading(false);
+    }
+  };
 
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<
@@ -77,6 +135,25 @@ function DiscoverPageInner() {
     null
   );
   const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
+  const [addToTeamError, setAddToTeamError] = useState<string | null>(null);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const resultsContainerRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const requestIdRef = useRef<number>(0);
+
+  // Keep results padding-bottom in sync with floating composer height
+  useEffect(() => {
+    const el = composerRef.current;
+    const container = resultsContainerRef.current;
+    if (!el || !container) return;
+    const observer = new ResizeObserver(() => {
+      const h = el.getBoundingClientRect().height;
+      container.style.paddingBottom = `${h + 32}px`;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const currentCountry = (profile?.country === "IN" ? "IN" : "US") as
     | "IN"
@@ -105,22 +182,58 @@ function DiscoverPageInner() {
     }
   }, []);
 
-  const handleClear = () => {
+  const handleClearResults = () => {
     setData(null);
-    setInputQuery("");
     setSearchError(null);
     setSelectedStores([]);
-    try { sessionStorage.removeItem("cani_discover_cache"); } catch { /* ignore */ }
+    try {
+      sessionStorage.removeItem("cani_discover_cache");
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleClearAll = () => {
+    handleClearResults();
+    setInputQuery("");
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (inputQuery) {
+          setInputQuery("");
+        } else if (data !== null) {
+          handleClearResults();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [data, inputQuery]);
+
+  const handleStop = () => {
+    requestIdRef.current++;
+    setIsSearching(false);
   };
 
   const handleSearch = async (queryToRun: string) => {
     const trimmed = queryToRun.trim();
     if (!trimmed) return;
 
+    const currentRequestId = ++requestIdRef.current;
     setIsSearching(true);
     setSearchError(null);
+
+    // Scroll results area to top upon new search
+    resultsContainerRef.current?.scrollTo({ top: 0, behavior: "instant" });
+
     try {
       const res = await searchAction({ query: trimmed });
+      if (currentRequestId !== requestIdRef.current) return;
       setData(res);
       setSelectedStores(res.stores.map((s) => s.source));
 
@@ -137,11 +250,21 @@ function DiscoverPageInner() {
         // ignore
       }
     } catch (err: unknown) {
-      setSearchError(
-        err instanceof Error ? err.message : "Search failed. Please try again."
-      );
+      if (currentRequestId === requestIdRef.current) {
+        const msg = getErrorMessage(err);
+        setSearchError(msg);
+        const retryMs = getRetryAfterMs(err);
+        if (retryMs && retryMs > 0 && retryMs <= 10000) {
+          setBurstCountdown(Math.ceil(retryMs / 1000));
+        }
+      }
     } finally {
-      setIsSearching(false);
+      if (currentRequestId === requestIdRef.current) {
+        setIsSearching(false);
+        setTimeout(() => {
+          textareaRef.current?.focus();
+        }, 0);
+      }
     }
   };
 
@@ -156,11 +279,18 @@ function DiscoverPageInner() {
     );
   };
 
+  const resetStoreFilters = () => {
+    if (data?.stores) {
+      setSelectedStores(data.stores.map((s) => s.source));
+    }
+  };
+
   const handleAddToTeam = async (
     teamId: Id<"teams">,
     item: ProductCardItem
   ) => {
     setAddingToTeamId(teamId);
+    setAddToTeamError(null);
     try {
       const res = await addToTeamMutation({
         teamId,
@@ -183,7 +313,7 @@ function DiscoverPageInner() {
         setAddedFeedback(null);
       }, 1200);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to add product.");
+      setAddToTeamError(getErrorMessage(err));
     } finally {
       setAddingToTeamId(null);
     }
@@ -215,248 +345,319 @@ function DiscoverPageInner() {
 
   const hasResults = data !== null;
 
-  return (
-    <div className="max-w-6xl w-full mx-auto space-y-8 selection:bg-neutral-900 selection:text-white font-normal">
-      {/* Search Header Area */}
-      <div
-        className={`transition-all duration-300 ${
-          hasResults || isSearching
-            ? "space-y-4"
-            : "py-12 sm:py-20 text-center max-w-2xl mx-auto space-y-6"
-        }`}
-      >
-        <div className={hasResults || isSearching ? "hidden" : "space-y-2"}>
-          <h1 className="font-serif text-3xl sm:text-4xl text-neutral-900 font-normal tracking-tight">
-            What are you looking for?
-          </h1>
-          <p className="text-xs sm:text-sm text-neutral-500 font-normal">
-            Describe it the way you would say it. Cani searches the stores for you.
-          </p>
-        </div>
-
-        {/* Search Input */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void handleSearch(inputQuery);
-          }}
-          className="w-full max-w-2xl mx-auto flex items-center gap-2"
-        >
-          <div className="relative flex-1">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-400">
-              <MagnifyingGlass size={18} weight="light" />
-            </div>
-            <input
-              type="text"
-              required
-              value={inputQuery}
-              onChange={(e) => setInputQuery(e.target.value)}
-              placeholder="e.g. running shoes under 3000, mechanical keyboard, cotton shirt..."
-              className="w-full h-12 pl-11 pr-4 bg-white border border-neutral-200 rounded-2xl text-xs sm:text-sm font-normal text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-900 transition"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={isSearching || !inputQuery.trim()}
-            className="h-12 px-6 rounded-2xl bg-neutral-900 text-white text-xs font-normal hover:bg-black transition cursor-pointer disabled:opacity-50 shrink-0 flex items-center justify-center gap-2"
-          >
-            {isSearching ? (
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <span>Search</span>
-            )}
-          </button>
-
-          {(data !== null || inputQuery) && !isSearching && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="h-12 px-4 rounded-2xl border border-neutral-200 bg-white text-neutral-600 text-xs font-normal hover:bg-neutral-50 hover:border-neutral-300 transition cursor-pointer shrink-0 flex items-center gap-1.5"
-              title="Clear results"
-            >
-              <X size={14} weight="light" />
-              <span>Clear</span>
-            </button>
-          )}
-        </form>
-
-        {/* Example Chips (in idle state) */}
-        {!hasResults && !isSearching && (
-          <div className="space-y-3 pt-2">
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {exampleChips.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => handleChipClick(chip)}
-                  className="px-3.5 py-1.5 rounded-full bg-white border border-neutral-200 hover:border-neutral-400 text-neutral-700 text-xs font-normal transition cursor-pointer"
-                >
-                  {chip}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center justify-center gap-2 pt-4 text-xs text-neutral-500 font-normal">
-              <span>
-                {currentCountry === "IN"
-                  ? "Searching Indian stores"
-                  : "Searching US stores"}
-              </span>
-              <span>•</span>
-              <MarketSwitcher />
-            </div>
-          </div>
-        )}
-
-        {/* Error message inline */}
-        {searchError && (
-          <p className="text-xs text-neutral-500 font-normal max-w-2xl mx-auto">
-            {searchError}
-          </p>
-        )}
-      </div>
-
-      {/* Loading state */}
-      {isSearching && (
-        <div className="space-y-6 font-normal">
-          <div className="text-xs text-neutral-500 font-normal">
-            Searching {market.stores.slice(0, 3).map((s) => s.label).join(", ")}...
-          </div>
-
-          <Masonry
-            items={SKELETON_ITEMS}
-            getKey={(item) => String(item.id)}
-            renderItem={(item) => (
-              <div className="bg-white rounded-2xl border border-neutral-200/80 p-4 space-y-3 animate-pulse">
-                <div className={`w-full ${item.height} bg-neutral-100 rounded-xl`} />
-                <div className="h-4 bg-neutral-100 rounded w-3/4" />
-                <div className="h-3 bg-neutral-100 rounded w-1/2" />
-                <div className="h-4 bg-neutral-100 rounded w-1/4" />
-              </div>
-            )}
-          />
+  const renderComposer = () => (
+    <div className="w-full flex flex-col gap-1.5 font-normal">
+      {searchError && (
+        <div className="text-xs text-neutral-500 font-normal px-2">
+          {burstCountdown !== null && burstCountdown > 0
+            ? `Try again in ${burstCountdown}s`
+            : searchError}
         </div>
       )}
+      <PromptInput
+        value={inputQuery}
+        onValueChange={setInputQuery}
+        isLoading={isSearching}
+        onSubmit={() => handleSearch(inputQuery)}
+        maxHeight={160}
+        className="w-full rounded-3xl border border-neutral-200 bg-white p-3 sm:p-4 shadow-none"
+      >
+        <div className="flex items-start gap-2">
+          <PromptInputTextarea
+            ref={textareaRef}
+            placeholder="Search for anything to buy"
+            className="text-base font-normal text-neutral-900 placeholder:text-neutral-400 min-h-[28px]"
+          />
+          {inputQuery.trim().length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setInputQuery("");
+                textareaRef.current?.focus();
+              }}
+              className="p-1 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition cursor-pointer shrink-0 mt-0.5"
+              title="Clear text"
+            >
+              <X size={16} weight="light" />
+            </button>
+          )}
+        </div>
 
-      {/* Results view */}
-      {data && !isSearching && (
-        <div className="space-y-6 font-normal">
-          {/* Controls Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-neutral-200">
-            <div className="text-xs text-neutral-500 font-normal">
-              <span className="text-neutral-900 font-normal">
-                {filteredItems.length}
-              </span>{" "}
-              result{filteredItems.length !== 1 ? "s" : ""} for &ldquo;{data.query}&rdquo;
+        <PromptInputActions className="pt-2">
+          <MarketSwitcher variant="pill" />
+
+          <PromptInputAction
+            tooltip={isSearching ? "Stop search" : "Search"}
+            side="top"
+          >
+            <button
+              type={isSearching ? "button" : "submit"}
+              disabled={
+                (!isSearching && !inputQuery.trim()) ||
+                (burstCountdown !== null && burstCountdown > 0)
+              }
+              onClick={(e) => {
+                if (isSearching) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleStop();
+                }
+              }}
+              className="w-9 h-9 rounded-full bg-neutral-900 hover:bg-black text-white flex items-center justify-center disabled:opacity-30 disabled:hover:bg-neutral-900 transition cursor-pointer disabled:cursor-not-allowed shrink-0 shadow-none"
+              aria-label={isSearching ? "Stop search" : "Send search"}
+            >
+              {isSearching ? (
+                <Stop size={16} weight="light" />
+              ) : (
+                <ArrowUp size={18} weight="regular" />
+              )}
+            </button>
+          </PromptInputAction>
+        </PromptInputActions>
+      </PromptInput>
+    </div>
+  );
+
+  return (
+    <div className="h-full w-full flex flex-col overflow-hidden min-h-0 selection:bg-neutral-900 selection:text-white font-normal">
+      {/* Idle State: Centered Vertically and Horizontally */}
+      {!hasResults && !isSearching ? (
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center px-4 sm:px-6">
+          <div className="w-full max-w-3xl mx-auto flex flex-col items-center -translate-y-4 sm:-translate-y-6">
+            <div className="text-center space-y-2 mb-6">
+              <h1 className="font-serif text-3xl sm:text-4xl text-neutral-900 font-normal tracking-tight">
+                What are you looking for?
+              </h1>
+              <p className="text-xs sm:text-sm text-neutral-500 font-normal">
+                Describe it the way you would say it. Cani searches the stores for you.
+              </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Store Filter Chips */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {data.stores.map((s) => {
-                  const isSelected = selectedStores.includes(s.source);
-                  return (
-                    <button
-                      key={s.source}
-                      type="button"
-                      onClick={() => toggleStore(s.source)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-normal transition cursor-pointer border ${
-                        isSelected
-                          ? "bg-neutral-900 text-white border-neutral-900"
-                          : "bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300"
-                      }`}
-                    >
-                      {isSelected && <Check size={12} weight="light" />}
-                      <span>{s.source}</span>
-                      <span
-                        className={`text-2xs font-mono ${
-                          isSelected ? "text-white/70" : "text-neutral-400"
-                        }`}
-                      >
-                        ({s.count})
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+            {renderComposer()}
 
-              {/* Sort Select */}
-              <div className="flex items-center gap-1.5 text-xs text-neutral-500 font-normal">
-                <span>Sort:</span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className="bg-white hover:bg-neutral-50 text-neutral-800 text-xs font-normal px-2.5 py-1 rounded-lg border border-neutral-200 focus:outline-none cursor-pointer"
+            {/* Example Chips using PromptSuggestion */}
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-4">
+              {exampleChips.map((chip) => (
+                <PromptSuggestion
+                  key={chip}
+                  onClick={() => handleChipClick(chip)}
+                  className="rounded-full border border-neutral-200 bg-white hover:border-neutral-400 hover:bg-neutral-50 text-neutral-700 text-xs sm:text-sm font-normal transition cursor-pointer shadow-none px-3.5 py-1.5 h-auto"
                 >
-                  <option value="match">Best match</option>
-                  <option value="price-asc">Price: Low to High</option>
-                  <option value="price-desc">Price: High to Low</option>
-                  <option value="sale">On sale first</option>
-                </select>
-              </div>
+                  {chip}
+                </PromptSuggestion>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Docked / Results State: composer floats absolutely above scrollable results */
+        <div className="relative flex-1 min-h-0 overflow-hidden">
+          {/* 1. Results area: scrolls behind the floating composer */}
+          <div
+            ref={resultsContainerRef}
+            className="absolute inset-0 overflow-y-auto overscroll-contain px-6 sm:px-8 pt-6 w-full discover-scrollarea"
+            style={{ paddingBottom: "160px" }}
+          >
+            <div className="max-w-5xl mx-auto space-y-6">
+              {/* Skeletons when searching and no data yet */}
+              {isSearching && !data && (
+                <div className="space-y-6 font-normal">
+                  <div className="flex items-center gap-2.5 text-xs text-neutral-500 font-normal">
+                    <Loader variant="typing" size="sm" />
+                    <TextShimmer duration={2.5} spread={25}>
+                      Searching {market.stores.map((s) => s.label).join(", ")}...
+                    </TextShimmer>
+                  </div>
+                  <Masonry
+                    items={SKELETON_ITEMS}
+                    getKey={(item) => String(item.id)}
+                    renderItem={(item) => (
+                      <div className="bg-white rounded-2xl border border-neutral-200 p-4 space-y-3 animate-pulse shadow-none">
+                        <div className={`w-full ${item.ratio} bg-neutral-100 rounded-xl`} />
+                        <div className="h-4 bg-neutral-100 rounded w-3/4" />
+                        <div className="h-3 bg-neutral-100 rounded w-1/2" />
+                        <div className="h-4 bg-neutral-100 rounded w-1/4" />
+                      </div>
+                    )}
+                  />
+                </div>
+              )}
+
+              {/* Results view */}
+              {data && (
+                <div className="space-y-6 font-normal">
+                  {/* Results Header: One clean row + store filter chips */}
+                  <div className="space-y-3 pb-3 border-b border-neutral-200 font-normal">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="text-xs text-neutral-500 font-normal">
+                        <strong className="font-normal text-neutral-900">{filteredItems.length}</strong>{" "}
+                        result{filteredItems.length !== 1 ? "s" : ""} for &ldquo;{data.query}&rdquo;
+                      </div>
+
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <button
+                          type="button"
+                          onClick={handleToggleSearchWatch}
+                          disabled={isWatchingSearchLoading}
+                          className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-xl transition cursor-pointer font-normal ${
+                            existingSearchWatch
+                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                              : "bg-neutral-100 hover:bg-neutral-200 text-neutral-700"
+                          }`}
+                          title={
+                            existingSearchWatch
+                              ? "Watching this search for new deals and launches (click to stop)"
+                              : "Watch this search with Firecrawl"
+                          }
+                        >
+                          {existingSearchWatch ? (
+                            <>
+                              <Check size={13} weight="light" className="text-emerald-700" />
+                              <span>Watching search</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye size={13} weight="light" />
+                              <span>Watch search</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleClearAll}
+                          className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-900 transition cursor-pointer font-normal"
+                        >
+                          <ArrowCounterClockwise size={13} weight="light" />
+                          <span>Clear results</span>
+                        </button>
+
+                        <div className="flex items-center gap-1.5 text-xs text-neutral-500 font-normal">
+                          <span>Sort:</span>
+                          <Select
+                            value={sortBy}
+                            onValueChange={(val) =>
+                              setSortBy(
+                                val as "match" | "price-asc" | "price-desc" | "sale"
+                              )
+                            }
+                          >
+                            <SelectTrigger className="w-36 h-7 text-xs bg-white border-neutral-200 font-normal">
+                              <SelectValue placeholder="Best match" />
+                            </SelectTrigger>
+                            <SelectContent align="end">
+                              <SelectItem value="match">Best match</SelectItem>
+                              <SelectItem value="price-asc">Price: Low to High</SelectItem>
+                              <SelectItem value="price-desc">Price: High to Low</SelectItem>
+                              <SelectItem value="sale">On sale first</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Store Filter Chips */}
+                    {data.stores && data.stores.length > 0 && (
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                        {data.stores.map((s) => {
+                          const isSelected = selectedStores.includes(s.source);
+                          return (
+                            <button
+                              key={s.source}
+                              type="button"
+                              onClick={() => toggleStore(s.source)}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-normal transition cursor-pointer border shrink-0 ${
+                                isSelected
+                                  ? "bg-neutral-900 text-white border-neutral-900"
+                                  : "bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300"
+                              }`}
+                            >
+                              {isSelected && <Check size={12} weight="light" />}
+                              <span>{s.source}</span>
+                              <span
+                                className={`text-2xs font-mono ${
+                                  isSelected ? "text-white/70" : "text-neutral-400"
+                                }`}
+                              >
+                                ({s.count})
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Product Cards Masonry */}
+                  {sortedItems.length === 0 ? (
+                    <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-neutral-200 text-xs text-neutral-500 font-normal space-y-2">
+                      <p>Nothing matches these filters.</p>
+                      <button
+                        type="button"
+                        onClick={resetStoreFilters}
+                        className="text-neutral-900 underline hover:text-neutral-700 transition cursor-pointer font-normal text-xs"
+                      >
+                        Reset filters
+                      </button>
+                    </div>
+                  ) : (
+                    <Masonry
+                      items={sortedItems}
+                      getKey={(item, idx) => `${item.url}-${idx}`}
+                      renderItem={(item) => (
+                        <ProductCard
+                          item={item}
+                          onAddToTeam={() => setSelectedProductForTeam(item)}
+                          fallbackCurrency={market.currency}
+                        />
+                      )}
+                    />
+                  )}
+
+                  {/* Also Worth a Look Group with Prompt-Kit Source */}
+                  {data.alsoWorthALook && data.alsoWorthALook.length > 0 && (
+                    <section className="mt-12 pt-8 border-t border-neutral-200 space-y-3 font-normal">
+                      <h3 className="font-serif text-lg text-neutral-900 font-normal">
+                        Also worth a look
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-2 font-normal">
+                        {data.alsoWorthALook.map((entry, i) => (
+                          <Source key={i} href={entry.url}>
+                            <SourceTrigger
+                              showFavicon
+                              label={entry.title || undefined}
+                              className="bg-white hover:bg-neutral-50 border border-neutral-200 font-normal text-neutral-700 max-w-xs"
+                            />
+                            <SourceContent
+                              title={entry.title}
+                              description={entry.description}
+                            />
+                          </Source>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Product Cards Masonry */}
-          {sortedItems.length === 0 ? (
-            <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-neutral-200 text-xs text-neutral-500 font-normal">
-              Nothing matches these filters.
+          {/* 2. Floating composer: sits above the scroll area, no background strip */}
+          <div
+            className="absolute inset-x-0 bottom-0 z-20 pointer-events-none px-6 sm:px-8 pb-4"
+            style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))" }}
+          >
+            <div ref={composerRef} className="max-w-3xl mx-auto w-full pointer-events-auto">
+              {renderComposer()}
             </div>
-          ) : (
-            <Masonry
-              items={sortedItems}
-              getKey={(item, idx) => `${item.url}-${idx}`}
-              renderItem={(item) => (
-                <ProductCard
-                  item={item}
-                  onAddToTeam={() => setSelectedProductForTeam(item)}
-                  fallbackCurrency={market.currency}
-                />
-              )}
-            />
-          )}
-
-          {/* Also Worth a Look Group */}
-          {data.alsoWorthALook && data.alsoWorthALook.length > 0 && (
-            <section className="mt-12 pt-8 border-t border-neutral-200 space-y-4 font-normal">
-              <h3 className="font-serif text-lg text-neutral-900 font-normal">
-                Also worth a look
-              </h3>
-              <div className="divide-y divide-neutral-100 bg-white rounded-2xl border border-neutral-200/80 overflow-hidden font-normal">
-                {data.alsoWorthALook.map((entry, i) => (
-                  <a
-                    key={i}
-                    href={entry.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-4 block hover:bg-neutral-50 transition group font-normal"
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <h4 className="font-serif text-sm text-neutral-900 group-hover:underline font-normal">
-                        {entry.title}
-                      </h4>
-                      <span className="text-2xs font-mono text-neutral-400 shrink-0 font-normal">
-                        {entry.source}
-                      </span>
-                    </div>
-                    {entry.description && (
-                      <p className="text-xs text-neutral-500 line-clamp-1 font-normal">
-                        {entry.description}
-                      </p>
-                    )}
-                  </a>
-                ))}
-              </div>
-            </section>
-          )}
+          </div>
         </div>
       )}
 
       {/* Add To Team Dialog */}
       {selectedProductForTeam && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs font-normal">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-neutral-200 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 font-normal">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-neutral-200 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-serif text-lg text-neutral-900 font-normal">
                 Select Team Board
@@ -466,12 +667,20 @@ function DiscoverPageInner() {
                 onClick={() => {
                   setSelectedProductForTeam(null);
                   setAddedFeedback(null);
+                  setAddToTeamError(null);
                 }}
-                className="p-1 text-neutral-400 hover:text-neutral-900 transition cursor-pointer font-normal"
+                className="p-1 rounded-lg text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition cursor-pointer font-normal"
               >
                 <X size={16} weight="light" />
               </button>
             </div>
+
+            {addToTeamError && (
+              <div className="p-3 rounded-xl bg-red-50 text-red-700 text-xs flex items-center gap-2 border border-red-200 font-normal">
+                <WarningCircle size={16} weight="light" />
+                <span>{addToTeamError}</span>
+              </div>
+            )}
 
             {addedFeedback ? (
               <div className="p-4 rounded-xl bg-emerald-50 text-emerald-800 text-xs flex items-center gap-2 border border-emerald-200 font-normal">

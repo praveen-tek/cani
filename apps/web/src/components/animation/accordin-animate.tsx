@@ -178,19 +178,15 @@ function AccordionContent({
   };
 
   return (
-    <AnimatePresence initial={false}>
-      {isExpanded && (
-        <motion.div
-          initial="collapsed"
-          animate="expanded"
-          exit="collapsed"
-          variants={combinedVariants}
-          className={className}
-        >
-          {children}
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <motion.div
+      initial={false}
+      animate={isExpanded ? "expanded" : "collapsed"}
+      variants={combinedVariants}
+      className={cn(className, !isExpanded && "hidden")}
+      hidden={!isExpanded}
+    >
+      {children}
+    </motion.div>
   );
 }
 

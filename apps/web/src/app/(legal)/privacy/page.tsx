@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <LegalLayout
       title="Privacy Policy"
-      subtitle="We believe in privacy-first autonomous shopping. We do not sell your personal data or scrape your browsing history."
+      subtitle="We believe in privacy-first shopping. We do not sell your personal data or scrape your browsing history."
       lastUpdated="January 15, 2026"
     >
       <section className="space-y-4">

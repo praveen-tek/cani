@@ -18,6 +18,33 @@ export const me = query({
   },
 });
 
+export const setEmailAlerts = mutation({
+  args: {
+    enabled: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new ConvexError("Unauthenticated");
+    }
+
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+
+    if (!profile) {
+      throw new ConvexError("Profile not found");
+    }
+
+    await ctx.db.patch(profile._id, {
+      emailAlerts: args.enabled,
+    });
+
+    return { success: true, emailAlerts: args.enabled };
+  },
+});
+
 export const saveOnboarding = mutation({
   args: {
     name: v.string(),
@@ -303,6 +330,23 @@ export const deleteAccount = mutation({
       .collect();
     for (const v of userVotes) {
       await ctx.db.delete(v._id);
+    }
+
+    // 3b. Delete user's monitors & alerts
+    const userMonitors = await ctx.db
+      .query("monitors")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const m of userMonitors) {
+      await ctx.db.delete(m._id);
+    }
+
+    const userAlerts = await ctx.db
+      .query("alerts")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const a of userAlerts) {
+      await ctx.db.delete(a._id);
     }
 
     // 4. Handle teams

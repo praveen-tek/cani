@@ -4,7 +4,7 @@ export function TextLoopSection() {
   return (
     <section className="flex items-center justify-center overflow-hidden py-6">
       <TextLoop
-        text="Agentic Way of Shopping ✦"
+        text="Shop together, decide together ✦"
         shape="wave"
         speed={90}
         direction="forward"

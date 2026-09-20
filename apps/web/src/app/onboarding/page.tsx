@@ -545,7 +545,7 @@ export default function OnboardingPage() {
 
       {/* Footer */}
       <footer className="px-8 py-4 text-center text-2xs text-neutral-400 border-t border-neutral-200 bg-white font-normal">
-        <span>© {new Date().getFullYear()} Cani Inc. Autonomous Shopping Assistant</span>
+        <span>© {new Date().getFullYear()} Cani Inc. Shop with friends, decide together</span>
       </footer>
     </div>
   );

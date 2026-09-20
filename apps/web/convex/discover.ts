@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
 } from "./_generated/server";
@@ -9,6 +10,13 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { getMarket } from "./lib/markets";
 import {
+  enforce,
+  spendFirecrawl,
+  estimateDiscoverCost,
+} from "./lib/limits";
+import {
+  cleanAlsoWorthALookTitle,
+  cleanDescription,
   dedupeProducts,
   extractHostname,
   extractProductsFromSearchResult,
@@ -46,6 +54,114 @@ export const updateLastDiscoverAt = internalMutation({
     }
   },
 });
+
+export const getSearchCache = internalQuery({
+  args: {
+    key: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("searchCache")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .first();
+  },
+});
+
+export const setSearchCache = internalMutation({
+  args: {
+    key: v.string(),
+    payload: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("searchCache")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        payload: args.payload,
+        createdAt: Date.now(),
+      });
+    } else {
+      await ctx.db.insert("searchCache", {
+        key: args.key,
+        payload: args.payload,
+        createdAt: Date.now(),
+      });
+    }
+  },
+});
+
+export const cleanOldSearchCache = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
+    const oldRows = await ctx.db
+      .query("searchCache")
+      .filter((q) => q.lt(q.field("createdAt"), fortyEightHoursAgo))
+      .take(200);
+
+    for (const row of oldRows) {
+      await ctx.db.delete(row._id);
+    }
+    return { deleted: oldRows.length };
+  },
+});
+
+export const refreshCreditBalance = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const apiKey = process.env.FIRECRAWL_API_KEY;
+    if (!apiKey) return;
+
+    const lastRefreshed = await ctx.runQuery(
+      internal.mail.getAppConfigInternal,
+      {
+        key: "firecrawlBalanceRefreshedAt",
+      }
+    );
+    if (
+      lastRefreshed &&
+      Date.now() - Number(lastRefreshed) < 10 * 60 * 1000
+    ) {
+      return;
+    }
+
+    try {
+      const res = await fetch("https://api.firecrawl.dev/v2/team/credit-usage", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const remaining =
+          json?.data?.remainingCredits ?? json?.remainingCredits;
+        if (typeof remaining === "number") {
+          await ctx.runMutation(internal.mail.setAppConfigInternal, {
+            key: "firecrawlRemainingCredits",
+            value: String(remaining),
+          });
+          await ctx.runMutation(internal.mail.setAppConfigInternal, {
+            key: "firecrawlBalanceRefreshedAt",
+            value: String(Date.now()),
+          });
+        }
+      }
+    } catch {
+      // Ignore network errors
+    }
+  },
+});
+
+export function normalizeSearchKey(phrase: string, country?: string): string {
+  const c = (country || "US").toUpperCase();
+  const cleaned = cleanQueryPhrase(phrase)
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${c}:${cleaned}`;
+}
 
 const EXCLUDED_OPEN_WEB_DOMAINS = [
   "youtube.com",
@@ -158,19 +274,45 @@ export const search = action({
       );
     }
 
-    if (profile.lastDiscoverAt && Date.now() - profile.lastDiscoverAt < 5000) {
-      throw new ConvexError("Please wait a few seconds before searching again.");
+    await enforce(ctx, "discoverBurst", { key: userId });
+
+    const market = getMarket(profile.country);
+    const cleanedPhrase = cleanQueryPhrase(rawQuery);
+    const cacheKey = normalizeSearchKey(cleanedPhrase, profile.country);
+
+    const cacheTtlHours = Number(process.env.SEARCH_CACHE_TTL_HOURS ?? 12);
+    const cached = await ctx.runQuery(internal.discover.getSearchCache, {
+      key: cacheKey,
+    });
+
+    if (
+      cached &&
+      Date.now() - cached.createdAt < cacheTtlHours * 60 * 60 * 1000
+    ) {
+      console.log(`[Discover] Cache HIT for key=${cacheKey}`);
+      try {
+        const parsed = JSON.parse(cached.payload);
+        return {
+          ...parsed,
+          query: cleanedPhrase,
+        };
+      } catch {
+        // Fall through on JSON parse failure
+      }
     }
 
-    await ctx.runMutation(internal.discover.updateLastDiscoverAt, { userId });
+    console.log(`[Discover] Cache MISS for key=${cacheKey}`);
+
+    await enforce(ctx, "discoverDaily", { key: userId });
+    await spendFirecrawl(ctx, { cost: estimateDiscoverCost() });
+
+    ctx.runAction(internal.discover.refreshCreditBalance, {}).catch(() => {});
 
     const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlApiKey) {
       throw new ConvexError("FIRECRAWL_API_KEY is not configured on Convex.");
     }
 
-    const market = getMarket(profile.country);
-    const cleanedPhrase = cleanQueryPhrase(rawQuery);
     const tokens = extractKeywordTokens(cleanedPhrase);
 
     console.log("Cleaned phrase:", cleanedPhrase);
@@ -231,9 +373,10 @@ export const search = action({
     }
 
     const candidateProducts: NormalizedProduct[] = [];
-    const alsoWorthALookCandidates: AlsoWorthALookItem[] = [];
-    let totalSearchResultsCount = 0;
+    const openWebAlsoWorthALook: AlsoWorthALookItem[] = [];
+    const fallbackAlsoWorthALook: AlsoWorthALookItem[] = [];
     let anySearchSucceeded = false;
+    let didRetryStore = false;
 
     for (const item of settled) {
       if (item.status === "fulfilled") {
@@ -245,10 +388,11 @@ export const search = action({
         console.log(
           `Results per search for "${val.queryString}": ${val.results.length}`
         );
-        totalSearchResultsCount += val.results.length;
 
         if (val.type === "store") {
           const storeDomain = val.store.domain;
+          let storeProductsFound = 0;
+
           for (const res of val.results) {
             const { products, fallback } = extractProductsFromSearchResult(
               res,
@@ -256,16 +400,148 @@ export const search = action({
               storeDomain
             );
 
-            if (products.length > 0) {
-              candidateProducts.push(...products);
-              productsPerStore[storeDomain] =
-                (productsPerStore[storeDomain] || 0) + products.length;
-            } else if (fallback) {
-              candidateProducts.push(fallback);
-              productsPerStore[storeDomain] =
-                (productsPerStore[storeDomain] || 0) + 1;
+            // Check if any product extracted meets Rule 1 (has imageUrl OR price/salePrice)
+            for (const prod of products) {
+              if (
+                Boolean(prod.imageUrl) ||
+                prod.price !== undefined ||
+                prod.salePrice !== undefined
+              ) {
+                candidateProducts.push(prod);
+                storeProductsFound++;
+              } else {
+                // Item failing Rule 1 moves into alsoWorthALook
+                const rawUrl = (res.url || res.metadata?.sourceURL || "").trim();
+                const rawDesc = (res.description || res.snippet || "").trim();
+                if (rawUrl) {
+                  fallbackAlsoWorthALook.push({
+                    title: cleanAlsoWorthALookTitle(prod.title || res.title),
+                    url: normalizeUrl(rawUrl),
+                    source: storeDomain,
+                    description: cleanDescription(rawDesc),
+                  });
+                }
+              }
+            }
+
+            if (products.length === 0) {
+              if (fallback) {
+                // If fallback recovered an image for a single product page, it can be a grid item
+                if (
+                  Boolean(fallback.imageUrl) ||
+                  fallback.price !== undefined ||
+                  fallback.salePrice !== undefined
+                ) {
+                  candidateProducts.push(fallback);
+                  storeProductsFound++;
+                } else {
+                  // Move fallback into alsoWorthALook
+                  const rawUrl = (
+                    res.url ||
+                    res.metadata?.sourceURL ||
+                    fallback.url ||
+                    ""
+                  ).trim();
+                  const rawTitle = (
+                    res.title ||
+                    res.metadata?.title ||
+                    fallback.title ||
+                    ""
+                  ).trim();
+                  const rawDesc = (res.description || res.snippet || "").trim();
+                  if (rawUrl && rawTitle) {
+                    fallbackAlsoWorthALook.push({
+                      title: cleanAlsoWorthALookTitle(rawTitle),
+                      url: normalizeUrl(rawUrl),
+                      source: storeDomain,
+                      description: cleanDescription(rawDesc),
+                    });
+                  }
+                }
+              }
             }
           }
+
+          // Optional retry: If zero grid products produced, retry once with residential proxy
+          if (storeProductsFound === 0 && !didRetryStore) {
+            didRetryStore = true;
+            console.log("Retry store search:", storeDomain);
+            const retryRes = await runFirecrawlSearch(
+              firecrawlApiKey,
+              val.queryString,
+              market,
+              { limit: 3, scrape: true, proxy: "residential" }
+            );
+
+            if (retryRes.status >= 200 && retryRes.status < 300) {
+              anySearchSucceeded = true;
+            }
+
+            for (const res of retryRes.results) {
+              const { products, fallback } = extractProductsFromSearchResult(
+                res,
+                market,
+                storeDomain
+              );
+
+              for (const prod of products) {
+                if (
+                  Boolean(prod.imageUrl) ||
+                  prod.price !== undefined ||
+                  prod.salePrice !== undefined
+                ) {
+                  candidateProducts.push(prod);
+                  storeProductsFound++;
+                } else {
+                  const rawUrl = (res.url || res.metadata?.sourceURL || "").trim();
+                  const rawDesc = (res.description || res.snippet || "").trim();
+                  if (rawUrl) {
+                    fallbackAlsoWorthALook.push({
+                      title: cleanAlsoWorthALookTitle(prod.title || res.title),
+                      url: normalizeUrl(rawUrl),
+                      source: storeDomain,
+                      description: cleanDescription(rawDesc),
+                    });
+                  }
+                }
+              }
+
+              if (products.length === 0 && fallback) {
+                if (
+                  Boolean(fallback.imageUrl) ||
+                  fallback.price !== undefined ||
+                  fallback.salePrice !== undefined
+                ) {
+                  candidateProducts.push(fallback);
+                  storeProductsFound++;
+                } else {
+                  const rawUrl = (
+                    res.url ||
+                    res.metadata?.sourceURL ||
+                    fallback.url ||
+                    ""
+                  ).trim();
+                  const rawTitle = (
+                    res.title ||
+                    res.metadata?.title ||
+                    fallback.title ||
+                    ""
+                  ).trim();
+                  const rawDesc = (res.description || res.snippet || "").trim();
+                  if (rawUrl && rawTitle) {
+                    fallbackAlsoWorthALook.push({
+                      title: cleanAlsoWorthALookTitle(rawTitle),
+                      url: normalizeUrl(rawUrl),
+                      source: storeDomain,
+                      description: cleanDescription(rawDesc),
+                    });
+                  }
+                }
+              }
+            }
+          }
+
+          productsPerStore[storeDomain] = storeProductsFound;
         } else if (val.type === "open-web") {
           for (const res of val.results) {
             const rUrl = (res.url || res.metadata?.sourceURL || "").trim();
@@ -287,22 +563,38 @@ export const search = action({
 
             if (isBlocked) continue;
 
-            alsoWorthALookCandidates.push({
-              title: rTitle,
+            openWebAlsoWorthALook.push({
+              title: cleanAlsoWorthALookTitle(rTitle),
               url: normalizeUrl(rUrl),
               source: hostname,
-              description: rDesc,
+              description: cleanDescription(rDesc),
             });
-
-            if (alsoWorthALookCandidates.length >= 5) {
-              break;
-            }
           }
         }
       }
     }
 
     console.log("Products per store:", productsPerStore);
+
+    // Build alsoWorthALook: max 5 entries, filling first with open-web results then fallbacks, skipping duplicates
+    const alsoWorthALookCandidates: AlsoWorthALookItem[] = [];
+    const seenAlsoUrls = new Set<string>();
+
+    for (const item of openWebAlsoWorthALook) {
+      if (alsoWorthALookCandidates.length >= 5) break;
+      if (!seenAlsoUrls.has(item.url)) {
+        seenAlsoUrls.add(item.url);
+        alsoWorthALookCandidates.push(item);
+      }
+    }
+
+    for (const item of fallbackAlsoWorthALook) {
+      if (alsoWorthALookCandidates.length >= 5) break;
+      if (!seenAlsoUrls.has(item.url)) {
+        seenAlsoUrls.add(item.url);
+        alsoWorthALookCandidates.push(item);
+      }
+    }
 
     const dedupedProducts = dedupeProducts(candidateProducts);
 
@@ -392,11 +684,27 @@ export const search = action({
       .filter(([_, count]) => count > 0)
       .map(([source, count]) => ({ source, count }));
 
-    return {
+    const result = {
       items: finalItems,
       alsoWorthALook: alsoWorthALookCandidates.slice(0, 5),
       stores: storesSummary,
       query: cleanedPhrase,
     };
+
+    if (finalItems.length > 0) {
+      try {
+        const payloadStr = JSON.stringify(result);
+        if (payloadStr.length < 500 * 1024) {
+          await ctx.runMutation(internal.discover.setSearchCache, {
+            key: cacheKey,
+            payload: payloadStr,
+          });
+        }
+      } catch {
+        // Skip caching on stringify error
+      }
+    }
+
+    return result;
   },
 });

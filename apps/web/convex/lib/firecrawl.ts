@@ -86,6 +86,135 @@ export function extractHostname(url: string): string {
   }
 }
 
+export function normalizeImageUrl(
+  input?: string,
+  baseUrl?: string
+): string | undefined {
+  if (!input || typeof input !== "string") return undefined;
+  let trimmed = input.trim();
+  if (!trimmed) return undefined;
+
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith("data:") || lower.startsWith("javascript:")) {
+    return undefined;
+  }
+
+  // Replace template placeholders with real values
+  trimmed = trimmed
+    .replace(/\{@width\}|\{width\}/gi, "832")
+    .replace(/\{@height\}|\{height\}/gi, "832")
+    .replace(/\{@quality\}|\{quality\}/gi, "70");
+
+  let resolvedUrl: string;
+  try {
+    if (trimmed.startsWith("//")) {
+      resolvedUrl = `https:${trimmed}`;
+    } else if (baseUrl) {
+      resolvedUrl = new URL(trimmed, baseUrl).toString();
+    } else {
+      resolvedUrl = new URL(trimmed).toString();
+    }
+  } catch {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(resolvedUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return undefined;
+    }
+    parsed.protocol = "https:";
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+export function cleanDescription(text?: string): string {
+  if (!text || typeof text !== "string") return "";
+  let clean = text.trim();
+  if (!clean) return "";
+
+  // Remove markdown headings (# lines)
+  clean = clean.replace(/^#{1,6}\s+.*$/gm, "");
+
+  // Remove markdown images ![alt](url)
+  clean = clean.replace(/!\[[^\]]*\]\([^)]*\)/g, "");
+
+  // Turn [text](url) links into just text
+  clean = clean.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+
+  // Drop bare urls
+  clean = clean.replace(/https?:\/\/\S+/gi, "");
+
+  // Remove backslashes and stray brackets
+  clean = clean.replace(/[\\[\]]/g, "");
+
+  // Collapse whitespace
+  clean = clean.replace(/\s+/g, " ").trim();
+
+  // Truncate to 160 characters at a word boundary with an ellipsis
+  if (clean.length <= 160) {
+    return clean;
+  }
+
+  const sub = clean.slice(0, 160);
+  const lastSpace = sub.lastIndexOf(" ");
+  if (lastSpace > 120) {
+    return `${sub.slice(0, lastSpace)}...`;
+  }
+  return `${sub.trim()}...`;
+}
+
+export function cleanAlsoWorthALookTitle(title?: string): string {
+  if (!title || typeof title !== "string") return "";
+  let t = title.trim();
+  // Strip trailing store suffixes from titles
+  t = t.replace(
+    /\s*[-–—|:]\s*(Myntra|Amazon(\.in|\.com)?|Flipkart(\.com)?|Target|SSENSE|Walmart|Nike|Best Buy|Ajio|Tata CLiQ|Nykaa)(\s*.*)?$/i,
+    ""
+  );
+  return t.trim() || title.trim();
+}
+
+export function isSingleProductPage(urlStr: string): boolean {
+  try {
+    const parsed = new URL(urlStr);
+    const host = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname.toLowerCase();
+    const search = parsed.search.toLowerCase();
+
+    // Amazon: paths containing /dp/ or /gp/product/
+    if (
+      host.includes("amazon.") &&
+      (pathname.includes("/dp/") || pathname.includes("/gp/product/"))
+    ) {
+      return true;
+    }
+
+    // Flipkart: paths containing /p/ with an itm or pid query
+    if (
+      host.includes("flipkart.") &&
+      pathname.includes("/p/") &&
+      (parsed.searchParams.has("itm") ||
+        parsed.searchParams.has("pid") ||
+        search.includes("itm=") ||
+        search.includes("pid="))
+    ) {
+      return true;
+    }
+
+    // Myntra: paths ending in a numeric id followed by /buy
+    if (host.includes("myntra.") && /\/\d+\/buy\/?$/.test(pathname)) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export async function runFirecrawlSearch(
   apiKey: string,
   queryText: string,
@@ -94,11 +223,13 @@ export async function runFirecrawlSearch(
     limit?: number;
     scrape?: boolean;
     timeoutMs?: number;
+    proxy?: "auto" | "residential";
   }
 ): Promise<{ status: number; results: any[] }> {
   const limit = options?.limit ?? 3;
   const scrape = options?.scrape ?? true;
   const timeoutMs = options?.timeoutMs ?? 25000;
+  const proxySetting = options?.proxy ?? "auto";
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -131,7 +262,7 @@ export async function runFirecrawlSearch(
         country: market.firecrawlCountry,
         languages: market.languages,
       },
-      proxy: "auto",
+      proxy: proxySetting,
     };
   }
 
@@ -222,6 +353,8 @@ export function extractProductsFromSearchResult(
       const normalized = normalizeUrl(rawUrl, resultUrl);
       const source = extractHostname(normalized) || resultSource;
 
+      const normalizedImg = normalizeImageUrl(prod.imageUrl, normalized);
+
       const parsedPrice =
         typeof prod.price === "number" && !isNaN(prod.price)
           ? prod.price
@@ -254,34 +387,48 @@ export function extractProductsFromSearchResult(
           ? prod.rating
           : undefined;
 
-      products.push({
-        title: rawTitle,
-        url: normalized,
-        imageUrl:
-          typeof prod.imageUrl === "string" && prod.imageUrl.trim()
-            ? prod.imageUrl.trim()
-            : undefined,
-        price: finalPrice,
-        salePrice: finalSalePrice,
-        currency: market.currency,
-        source,
-        onSale,
-        reason: defaultReason,
-        rating,
-        country: market.country,
-      });
+      // Only items that have an imageUrl OR price/salePrice qualify as a product
+      const hasVisualOrPrice =
+        Boolean(normalizedImg) ||
+        finalPrice !== undefined ||
+        finalSalePrice !== undefined;
+
+      if (hasVisualOrPrice) {
+        products.push({
+          title: rawTitle,
+          url: normalized,
+          imageUrl: normalizedImg,
+          price: finalPrice,
+          salePrice: finalSalePrice,
+          currency: market.currency,
+          source,
+          onSale,
+          reason: defaultReason,
+          rating,
+          country: market.country,
+        });
+      }
     }
   }
 
   let fallback: NormalizedProduct | undefined;
   if (products.length === 0 && resultUrl && resultTitle.length >= 4) {
+    let recoveredImg: string | undefined;
+
+    // Only recover metadata image if URL is a single product page
+    if (isSingleProductPage(resultUrl)) {
+      const rawMetaImg =
+        searchResult.metadata?.ogImage ||
+        searchResult.metadata?.["og:image"] ||
+        searchResult.metadata?.image ||
+        undefined;
+      recoveredImg = normalizeImageUrl(rawMetaImg, resultUrl);
+    }
+
     fallback = {
       title: resultTitle,
       url: normalizeUrl(resultUrl),
-      imageUrl:
-        searchResult.metadata?.ogImage ||
-        searchResult.metadata?.image ||
-        undefined,
+      imageUrl: recoveredImg,
       price: undefined,
       salePrice: undefined,
       currency: market.currency,

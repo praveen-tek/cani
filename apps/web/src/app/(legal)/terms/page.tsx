@@ -2,30 +2,30 @@ import { LegalLayout } from "@/components/shared/legal-layout";
 
 export const metadata = {
   title: "Terms of Service — Cani",
-  description: "Terms and conditions governing the use of Cani's autonomous shopping agent platform.",
+  description: "Terms and conditions governing the use of Cani's shared shopping board platform.",
 };
 
 export default function TermsPage() {
   return (
     <LegalLayout
       title="Terms of Service"
-      subtitle="Please read these terms carefully before using Cani's autonomous shopping agent services."
+      subtitle="Please read these terms carefully before using Cani's shared shopping services."
       lastUpdated="January 15, 2026"
     >
       <section className="space-y-4">
         <h2 className="font-serif text-2xl text-gray-900">1. Acceptance of Terms</h2>
         <p>
-          By accessing, subscribing to, or using the Cani platform, browser extensions, APIs, or notification services (collectively, the &ldquo;Service&rdquo;), provided by Cani Inc. (&ldquo;Cani&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;), you agree to be bound by these Terms of Service (&ldquo;Terms&rdquo;). If you do not agree to these Terms, do not access or use the Service.
+          By accessing, subscribing to, or using the Cani platform, web application, APIs, or notification services (collectively, the &ldquo;Service&rdquo;), provided by Cani Inc. (&ldquo;Cani&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;), you agree to be bound by these Terms of Service (&ldquo;Terms&rdquo;). If you do not agree to these Terms, do not access or use the Service.
         </p>
       </section>
 
       <section className="space-y-4">
         <h2 className="font-serif text-2xl text-gray-900">2. Description of the Service</h2>
         <p>
-          Cani provides autonomous software agents that monitor publicly accessible third-party e-commerce product pages on your behalf, extract inventory and price status, and send automated notifications via email, SMS, push, or webhooks based on your user-configured criteria.
+          Cani provides tools that allow users to search products, collaborate in shared shopping rooms, vote on items, and receive scheduled notifications for price drops and launches via email.
         </p>
         <p>
-          Cani is an independent productivity and monitoring tool. Cani is not affiliated with, endorsed by, or sponsored by any third-party retailers, storefronts, brands, or marketplaces monitored through the Service (including but not limited to SSENSE, Amazon, Nike, Shopify, or others).
+          Cani is an independent productivity tool. Cani is not affiliated with, endorsed by, or sponsored by any third-party retailers, storefronts, brands, or marketplaces displayed through the Service (including but not limited to Amazon, Flipkart, Myntra, Walmart, Best Buy, or others).
         </p>
       </section>
 
@@ -40,7 +40,7 @@ export default function TermsPage() {
         <ul className="list-disc pl-5 space-y-2 text-gray-600">
           <li>Attempting to disrupt or overburden any third-party retailer&apos;s infrastructure.</li>
           <li>Circumventing fair purchase limits established by retailers for fraudulent resale or illegal ticket-scalping purposes.</li>
-          <li>Reverse engineering, decompiling, or probing Cani&apos;s underlying proprietary reasoning engine or infrastructure.</li>
+          <li>Reverse engineering, decompiling, or probing Cani&apos;s underlying service infrastructure.</li>
         </ul>
       </section>
 
@@ -51,7 +51,7 @@ export default function TermsPage() {
             Important Retailer Disclaimer:
           </p>
           <p>
-            Cani acts as a notification and automation assistant. Cani does not guarantee retailer price accuracy, stock availability, successful item checkout, or that a third-party merchant will honor a listed price. Third-party storefronts may cancel orders, change prices, or alter inventory without notice.
+            Cani acts as an informational shopping board and notification tool. Cani does not guarantee retailer price accuracy, stock availability, or that a third-party merchant will honor a listed price. Third-party storefronts may cancel orders, change prices, or alter inventory without notice.
           </p>
         </div>
         <p>

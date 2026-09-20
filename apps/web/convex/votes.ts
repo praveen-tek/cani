@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation } from "./_generated/server";
 import { ConvexError } from "convex/values";
 import { requireMember } from "./lib/membership";
+import { enforce } from "./lib/limits";
 
 export const cast = mutation({
   args: {
@@ -15,6 +16,8 @@ export const cast = mutation({
     }
 
     const { userId } = await requireMember(ctx, product.teamId);
+
+    await enforce(ctx, "voteBurst", { key: userId });
 
     const existingVote = await ctx.db
       .query("votes")

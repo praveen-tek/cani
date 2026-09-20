@@ -78,7 +78,7 @@ export function Footer() {
             <h3 className="font-serif text-5xl text-gray-900 leading-none">cani</h3>
           </div>
           <p className="text-sm text-gray-600 mt-3">
-            Agentic shopping that watches, compares, and buys for you.
+            Cani is a shared shopping board. Search stores, add products to a room, vote with friends and get alerts when prices drop.
           </p>
         </div>
 
@@ -136,7 +136,7 @@ export function Footer() {
 
       <div className="bg-orange-50/90 border-t border-orange-100/60 px-10 py-5 text-xs text-gray-500 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10">
         <p>© {new Date().getFullYear()} Cani Inc. All rights reserved.</p>
-        <p className="font-mono text-2xs text-gray-400">Autonomous Shopping Intelligence</p>
+        <p className="font-mono text-2xs text-gray-400">Shop with friends, decide together</p>
       </div>
     </footer>
   );

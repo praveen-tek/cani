@@ -6,18 +6,18 @@ export default function Hero() {
       <div className="max-w-5xl">
         <AnimatedContent distance={60} direction="vertical" delay={0.15}>
           <h1 className="font-serif text-6xl leading-tight text-gray-900">
-            Your shortcut
+            Your shared board
             <br />
-            to the products
+            to find and choose
             <br />
-            you actually <span className="italic">want.</span>
+            what to <span className="italic">buy.</span>
           </h1>
         </AnimatedContent>
 
         <AnimatedContent distance={50} direction="vertical" delay={0.3}>
           <p className="text-gray-600 mt-6 flex items-center gap-3 flex-wrap">
             <span className="text-md">
-              Agentic shopping that watches, compares, and buys for you.
+              Search stores, share rooms, vote, and track price drops.
             </span>
             <span className="inline-flex items-center gap-1.5 bg-gray-100 rounded-full px-3 py-1 text-md text-gray-800">
               <span className="w-2 h-2 rounded-full bg-blue-500"></span>
@@ -25,19 +25,19 @@ export default function Hero() {
             </span>
             <span className="inline-flex items-center gap-1.5 bg-gray-100 rounded-full px-3 py-1 text-md text-gray-800">
               <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-              Restocks
+              Price drops
             </span>
             <span className="inline-flex items-center gap-1.5 bg-gray-100 rounded-full px-3 py-1 text-md    text-gray-800">
               <span className="w-2 h-2 rounded-full bg-pink-500"></span>
-              Price Drops
+              Launches
             </span>
             <span className="inline-flex items-center gap-1.5 bg-gray-100 rounded-full px-3 py-1 text-md text-gray-800">
               <span className="w-2 h-2 rounded-full bg-red-500"></span>
-              AI Agents
+              Rooms
             </span>
             <span className="inline-flex items-center gap-1.5 bg-gray-100 rounded-full px-3 py-1 text-md text-gray-800">
               <span className="w-2 h-2 rounded-full bg-green-600"></span>
-              Automation
+              Votes
             </span>
           </p>
         </AnimatedContent>
