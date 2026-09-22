@@ -57,7 +57,7 @@ interface TeamModalContextType {
 }
 
 const TeamModalContext = createContext<TeamModalContextType>({
-  openCreateTeam: () => {},
+  openCreateTeam: () => { },
 });
 
 export const useTeamModal = () => useContext(TeamModalContext);
@@ -174,9 +174,8 @@ function DashboardTopBar() {
                   {recentAlerts.map((a) => (
                     <div
                       key={a._id}
-                      className={`p-2 rounded-xl text-xs space-y-1 transition ${
-                        a.read ? "bg-white text-neutral-600" : "bg-neutral-50 text-neutral-900 font-medium"
-                      }`}
+                      className={`p-2 rounded-xl text-xs space-y-1 transition ${a.read ? "bg-white text-neutral-600" : "bg-neutral-50 text-neutral-900 font-medium"
+                        }`}
                     >
                       <div className="flex items-center justify-between text-2xs">
                         <span className="px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-800 font-mono uppercase text-[9px]">

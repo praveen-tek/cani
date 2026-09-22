@@ -51,7 +51,7 @@ function JoinPageInner() {
     setSignInError(null);
     try {
       // Use ?invite= so the OAuth library's ?code= stripping doesn't eat the invite code.
-      await signIn("google", { redirectTo: `/join?invite=${encodeURIComponent(code)}` });
+      await signIn("google", { redirectTo: `/join/?invite=${encodeURIComponent(code)}` });
     } catch (err: unknown) {
       setSignInError(err instanceof Error ? err.message : "Failed to sign in.");
     }
@@ -63,7 +63,7 @@ function JoinPageInner() {
     setJoinError(null);
     try {
       const res = await acceptInvite({ code });
-      router.push(`/team?id=${res.teamId}`);
+      router.push(`/team/?id=${res.teamId}`);
     } catch (err: unknown) {
       setJoinError(getErrorMessage(err));
       setIsJoining(false);

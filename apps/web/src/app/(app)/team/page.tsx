@@ -198,7 +198,7 @@ function TeamBoardInner() {
     setInviteError(null);
     try {
       const res = await createInvite({ teamId });
-      const fullUrl = `${window.location.origin}/join?code=${res.code}`;
+      const fullUrl = `${window.location.origin}/join/?code=${res.code}`;
       setInviteUrl(fullUrl);
     } catch (err: unknown) {
       setInviteError(getErrorMessage(err));
@@ -714,11 +714,10 @@ function TeamBoardInner() {
                       <button
                         type="button"
                         onClick={() => handleVote(item._id, 1)}
-                        className={`p-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-normal ${
-                          item.myVote === 1
+                        className={`p-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-normal ${item.myVote === 1
                             ? "bg-emerald-700 text-white"
                             : "hover:bg-neutral-200 text-neutral-700"
-                        }`}
+                          }`}
                         title="Upvote"
                       >
                         <CaretUp size={16} weight="light" />
@@ -732,11 +731,10 @@ function TeamBoardInner() {
                       <button
                         type="button"
                         onClick={() => handleVote(item._id, -1)}
-                        className={`p-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-normal ${
-                          item.myVote === -1
+                        className={`p-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-normal ${item.myVote === -1
                             ? "bg-rose-700 text-white"
                             : "hover:bg-neutral-200 text-neutral-700"
-                        }`}
+                          }`}
                         title="Downvote"
                       >
                         <CaretDown size={16} weight="light" />

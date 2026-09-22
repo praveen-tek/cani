@@ -57,7 +57,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
-      router.push("/sign-in");
+      router.push("/sign-in/");
     }
   }, [isAuthenticated, isAuthLoading, router]);
 
@@ -66,9 +66,9 @@ export default function OnboardingPage() {
       const pendingCode = sessionStorage.getItem("pending_invite_code");
       if (pendingCode) {
         sessionStorage.removeItem("pending_invite_code");
-        router.push(`/join?code=${encodeURIComponent(pendingCode)}`);
+        router.push(`/join/?code=${encodeURIComponent(pendingCode)}`);
       } else {
-        router.push("/discover");
+        router.push("/discover/");
       }
     } else if (profile?.name && !name) {
       setName(profile.name);
@@ -146,9 +146,9 @@ export default function OnboardingPage() {
       const pendingCode = sessionStorage.getItem("pending_invite_code");
       if (pendingCode) {
         sessionStorage.removeItem("pending_invite_code");
-        router.push(`/join?code=${encodeURIComponent(pendingCode)}`);
+        router.push(`/join/?code=${encodeURIComponent(pendingCode)}`);
       } else {
-        router.push("/discover");
+        router.push("/discover/");
       }
     } catch (err: unknown) {
       setError(

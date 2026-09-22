@@ -14,7 +14,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isAuthLoading && isAuthenticated && profile !== undefined) {
       if (!profile || !profile.onboardingComplete) {
-        router.replace("/onboarding");
+        router.replace("/onboarding/");
       }
     }
   }, [isAuthenticated, isAuthLoading, profile, router]);
@@ -39,7 +39,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
             Please sign in to access your Cani shopping dashboard and teams.
           </p>
           <Link
-            href="/sign-in"
+            href="/sign-in/"
             className="inline-flex items-center justify-center w-full py-3 rounded-xl bg-black text-white text-xs font-normal hover:bg-neutral-800 transition"
           >
             Continue to Sign In

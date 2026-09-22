@@ -133,7 +133,8 @@ export const addByUrl = action({
     ctx,
     args
   ): Promise<{ productId: string; alreadyExisted: boolean; scraped: boolean }> => {
-    const userId = await getAuthUserId(ctx);
+    try {
+      const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new ConvexError("Unauthenticated");
     }
@@ -304,11 +305,19 @@ export const addByUrl = action({
       source,
     });
 
-    return {
-      productId: inserted.productId,
-      alreadyExisted: inserted.alreadyExisted,
-      scraped,
-    };
+      return {
+        productId: inserted.productId,
+        alreadyExisted: inserted.alreadyExisted,
+        scraped,
+      };
+    } catch (err) {
+      if (err instanceof ConvexError) {
+        throw err;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[products:addByUrl] error: ${msg}`);
+      throw new ConvexError("Something went wrong on our side. Please try again.");
+    }
   },
 });
 

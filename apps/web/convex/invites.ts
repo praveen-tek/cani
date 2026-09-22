@@ -398,10 +398,11 @@ export const sendEmailInvite = action({
     ctx,
     args
   ): Promise<{ status: "sent" | "failed"; masked: string }> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Unauthenticated");
-    }
+    try {
+      const userId = await getAuthUserId(ctx);
+      if (!userId) {
+        throw new ConvexError("Unauthenticated");
+      }
 
     const cleanEmail = args.email.trim().toLowerCase();
     if (!isValidEmail(cleanEmail)) {
@@ -433,7 +434,7 @@ export const sendEmailInvite = action({
     );
 
     const siteUrl = process.env.SITE_URL || "https://cani.app";
-    const joinUrl = `${siteUrl}/join?code=${code}`;
+    const joinUrl = `${siteUrl}/join/?code=${code}`;
 
     const { subject, text, html } = inviteEmail({
       inviterName,
@@ -473,7 +474,15 @@ export const sendEmailInvite = action({
       error: sendRes.error || "Failed to deliver email",
     });
 
-    return { status: "failed", masked: maskEmail(cleanEmail) };
+      return { status: "failed", masked: maskEmail(cleanEmail) };
+    } catch (err) {
+      if (err instanceof ConvexError) {
+        throw err;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[invites:sendEmailInvite] error: ${msg}`);
+      throw new ConvexError("Something went wrong on our side. Please try again.");
+    }
   },
 });
 

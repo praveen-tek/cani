@@ -332,7 +332,7 @@ export const sendAlertEmail = internalAction({
     }
 
     const siteUrl = process.env.SITE_URL || "https://cani.app";
-    const appUrl = `${siteUrl}/alerts`;
+    const appUrl = `${siteUrl}/watch/`;
 
     const { subject, text, html } = alertEmail({
       type: info.alert.type,

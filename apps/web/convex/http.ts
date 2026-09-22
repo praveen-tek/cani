@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { internal, components } from "./_generated/api";
 import { auth } from "./auth";
 
 const http = httpRouter();
@@ -174,6 +174,233 @@ http.route({
     }
 
     return new Response("ok", { status: 200 });
+  }),
+});
+
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".txt": "text/plain; charset=utf-8",
+  ".map": "application/json",
+  ".webmanifest": "application/manifest+json",
+  ".xml": "application/xml",
+};
+
+function getMimeType(path: string): string {
+  const ext = path.substring(path.lastIndexOf(".")).toLowerCase();
+  return MIME_TYPES[ext] || "application/octet-stream";
+}
+
+function hasFileExtension(path: string): boolean {
+  const lastSegment = path.split("/").pop() || "";
+  return lastSegment.includes(".") && !lastSegment.startsWith(".");
+}
+
+function isHashedAsset(path: string): boolean {
+  const match = path.match(/[-.]([\dA-Za-z_-]{6,32})\.[A-Za-z\d]+$/);
+  return match !== null && /[\d_-]/.test(match[1]);
+}
+
+function isHtmlContentType(contentType: string): boolean {
+  return contentType.startsWith("text/html");
+}
+
+function cacheControlFor(path: string): string {
+  return !path.toLowerCase().endsWith(".html") && isHashedAsset(path)
+    ? "public, max-age=31536000, immutable"
+    : "public, max-age=0, must-revalidate";
+}
+
+function decodeRequestPath(pathname: string): string | null {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+}
+
+function etagMatches(ifNoneMatch: string | null, etag: string): boolean {
+  if (!ifNoneMatch) return false;
+  return (
+    ifNoneMatch === "*" ||
+    ifNoneMatch === etag ||
+    ifNoneMatch === `W/${etag}` ||
+    `W/${ifNoneMatch}` === etag
+  );
+}
+
+http.route({
+  pathPrefix: "/",
+  method: "GET",
+  handler: httpAction(async (ctx, req) => {
+    const url = new URL(req.url);
+    const decodedPath = decodeRequestPath(url.pathname);
+    if (decodedPath === null) {
+      return new Response("Bad Request", {
+        status: 400,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+
+    let candidates: string[] = [];
+    if (decodedPath === "" || decodedPath === "/") {
+      candidates = ["/index.html"];
+    } else if (decodedPath.endsWith("/")) {
+      candidates = [
+        `${decodedPath}index.html`,
+        decodedPath.slice(0, -1),
+        `${decodedPath.slice(0, -1)}.html`,
+      ];
+    } else if (hasFileExtension(decodedPath)) {
+      candidates = [decodedPath];
+      if (decodedPath.includes("__PAGE__.txt") || decodedPath.includes("__next.")) {
+        const transformed1 = decodedPath.replace(
+          /(\/__next\.[^./]+)\.([^./]+)\.__PAGE__\.txt$/,
+          "$1/$2/__PAGE__.txt"
+        );
+        const transformed2 = decodedPath.replace(
+          /(\/__next\.[^./]+)\.__PAGE__\.txt$/,
+          "$1/__PAGE__.txt"
+        );
+        if (transformed1 !== decodedPath) candidates.push(transformed1);
+        if (transformed2 !== decodedPath) candidates.push(transformed2);
+      }
+    } else {
+      candidates = [
+        decodedPath,
+        `${decodedPath}/index.html`,
+        `${decodedPath}.html`,
+      ];
+    }
+
+    let asset: any = null;
+    let resolvedPath = "";
+
+    for (const candidate of candidates) {
+      const res = await ctx.runQuery(
+        components.staticHosting.lib.resolveAssetForHttp,
+        {
+          path: candidate,
+          spaFallback: false,
+        }
+      );
+      if (res) {
+        asset = res;
+        resolvedPath = candidate;
+        break;
+      }
+    }
+
+    if (!asset && !hasFileExtension(decodedPath)) {
+      const fallback = await ctx.runQuery(
+        components.staticHosting.lib.resolveAssetForHttp,
+        {
+          path: "/index.html",
+          spaFallback: true,
+        }
+      );
+      if (fallback) {
+        asset = fallback;
+        resolvedPath = "/index.html";
+      }
+    }
+
+    if (!asset) {
+      return new Response("Not Found", {
+        status: 404,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+
+    const contentType = asset.contentType || getMimeType(resolvedPath);
+    const cacheControl = cacheControlFor(resolvedPath);
+
+    if (asset.blobId && !isHtmlContentType(contentType)) {
+      const baseUrl = `${url.origin}/fs/blobs`;
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: `${baseUrl.replace(/\/$/, "")}/${asset.blobId}`,
+          "Cache-Control": cacheControl,
+        },
+      });
+    }
+
+    if (asset.appStorageId) {
+      if (
+        asset.etag &&
+        etagMatches(req.headers.get("If-None-Match"), asset.etag)
+      ) {
+        return new Response(null, {
+          status: 304,
+          headers: { ETag: asset.etag, "Cache-Control": cacheControl },
+        });
+      }
+      const blob = await ctx.storage.get(asset.appStorageId);
+      if (!blob) {
+        return new Response("Not Found", {
+          status: 404,
+          headers: { "Content-Type": "text/plain" },
+        });
+      }
+      return new Response(blob, {
+        status: 200,
+        headers: {
+          "Content-Type": contentType,
+          "Cache-Control": cacheControl,
+          ...(asset.etag ? { ETag: asset.etag } : {}),
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
+
+    if (!asset.storageUrl) {
+      return new Response("Asset not available", {
+        status: 500,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+
+    if (
+      asset.etag &&
+      etagMatches(req.headers.get("If-None-Match"), asset.etag)
+    ) {
+      return new Response(null, {
+        status: 304,
+        headers: { ETag: asset.etag, "Cache-Control": cacheControl },
+      });
+    }
+
+    const storageResponse = await fetch(asset.storageUrl);
+    if (!storageResponse.ok || !storageResponse.body) {
+      return new Response("Storage error", {
+        status: 500,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+
+    return new Response(storageResponse.body, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": cacheControl,
+        ...(asset.etag ? { ETag: asset.etag } : {}),
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   }),
 });
 

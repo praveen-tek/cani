@@ -395,13 +395,16 @@ export const createProductWatch = action({
     ctx,
     args
   ): Promise<{ monitorId: Id<"monitors">; firecrawlMonitorId: string }> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new ConvexError("Unauthenticated");
+    let firecrawlApiKey: string | undefined;
+    let firecrawlMonitorId: string | null = null;
+    try {
+      const userId = await getAuthUserId(ctx);
+      if (!userId) throw new ConvexError("Unauthenticated");
 
-    const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlApiKey) {
-      throw new ConvexError("FIRECRAWL_API_KEY is not configured on Convex.");
-    }
+      firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
+      if (!firecrawlApiKey) {
+        throw new ConvexError("FIRECRAWL_API_KEY is not configured on Convex.");
+      }
 
     let validUrl: URL;
     try {
@@ -483,8 +486,7 @@ export const createProductWatch = action({
     };
 
     let firecrawlMonitorId: string | null = null;
-    try {
-      const res = await fetch("https://api.firecrawl.dev/v2/monitor", {
+    const res = await fetch("https://api.firecrawl.dev/v2/monitor", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${firecrawlApiKey}`,
@@ -526,7 +528,7 @@ export const createProductWatch = action({
 
       return { monitorId, firecrawlMonitorId };
     } catch (err) {
-      if (firecrawlMonitorId) {
+      if (firecrawlMonitorId && firecrawlApiKey) {
         try {
           await fetch(
             `https://api.firecrawl.dev/v2/monitor/${firecrawlMonitorId}`,
@@ -541,7 +543,12 @@ export const createProductWatch = action({
           // ignore rollback error
         }
       }
-      throw err;
+      if (err instanceof ConvexError) {
+        throw err;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[monitors:createProductWatch] error: ${msg}`);
+      throw new ConvexError("Something went wrong on our side. Please try again.");
     }
   },
 });
@@ -557,13 +564,16 @@ export const createSearchWatch = action({
     ctx,
     args
   ): Promise<{ monitorId: Id<"monitors">; firecrawlMonitorId: string }> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new ConvexError("Unauthenticated");
+    let firecrawlApiKey: string | undefined;
+    let firecrawlMonitorId: string | null = null;
+    try {
+      const userId = await getAuthUserId(ctx);
+      if (!userId) throw new ConvexError("Unauthenticated");
 
-    const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlApiKey) {
-      throw new ConvexError("FIRECRAWL_API_KEY is not configured on Convex.");
-    }
+      firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
+      if (!firecrawlApiKey) {
+        throw new ConvexError("FIRECRAWL_API_KEY is not configured on Convex.");
+      }
 
     const trimmedQuery = args.query.trim();
     if (trimmedQuery.length < 2 || trimmedQuery.length > 256) {
@@ -613,8 +623,7 @@ export const createSearchWatch = action({
     };
 
     let firecrawlMonitorId: string | null = null;
-    try {
-      const res = await fetch("https://api.firecrawl.dev/v2/monitor", {
+    const res = await fetch("https://api.firecrawl.dev/v2/monitor", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${firecrawlApiKey}`,
@@ -654,7 +663,7 @@ export const createSearchWatch = action({
 
       return { monitorId, firecrawlMonitorId };
     } catch (err) {
-      if (firecrawlMonitorId) {
+      if (firecrawlMonitorId && firecrawlApiKey) {
         try {
           await fetch(
             `https://api.firecrawl.dev/v2/monitor/${firecrawlMonitorId}`,
@@ -669,7 +678,12 @@ export const createSearchWatch = action({
           // ignore rollback error
         }
       }
-      throw err;
+      if (err instanceof ConvexError) {
+        throw err;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[monitors:createSearchWatch] error: ${msg}`);
+      throw new ConvexError("Something went wrong on our side. Please try again.");
     }
   },
 });

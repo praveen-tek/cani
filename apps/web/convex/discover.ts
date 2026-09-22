@@ -252,7 +252,8 @@ export const search = action({
     stores: Array<{ source: string; count: number }>;
     query: string;
   }> => {
-    const userId = await getAuthUserId(ctx);
+    try {
+      const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new ConvexError("Unauthenticated");
     }
@@ -393,6 +394,7 @@ export const search = action({
           const storeDomain = val.store.domain;
           let storeProductsFound = 0;
 
+          let storeRawDumped = false;
           for (const res of val.results) {
             const { products, fallback } = extractProductsFromSearchResult(
               res,
@@ -400,28 +402,46 @@ export const search = action({
               storeDomain
             );
 
-            // Check if any product extracted meets Rule 1 (has imageUrl OR price/salePrice)
-            for (const prod of products) {
-              if (
-                Boolean(prod.imageUrl) ||
-                prod.price !== undefined ||
-                prod.salePrice !== undefined
-              ) {
-                candidateProducts.push(prod);
-                storeProductsFound++;
-              } else {
-                // Item failing Rule 1 moves into alsoWorthALook
-                const rawUrl = (res.url || res.metadata?.sourceURL || "").trim();
-                const rawDesc = (res.description || res.snippet || "").trim();
-                if (rawUrl) {
-                  fallbackAlsoWorthALook.push({
-                    title: cleanAlsoWorthALookTitle(prod.title || res.title),
-                    url: normalizeUrl(rawUrl),
-                    source: storeDomain,
-                    description: cleanDescription(rawDesc),
-                  });
-                }
+            // Log per-result extracted product count
+            console.log(
+              `[Discover] ${storeDomain} result url=${(res.url || "").slice(0, 80)} extracted products=${products.length} fallback=${Boolean(fallback)}`
+            );
+
+            // Dump the raw shape of the first result once per store (no API key, no page content)
+            if (!storeRawDumped) {
+              storeRawDumped = true;
+              try {
+                const raw = {
+                  url: res.url,
+                  title: res.title,
+                  description: res.description,
+                  hasJson: res.json !== undefined,
+                  jsonProductsLength: Array.isArray(res.json?.products) ? res.json.products.length : null,
+                  firstProduct: Array.isArray(res.json?.products) && res.json.products.length > 0
+                    ? {
+                        title: res.json.products[0].title,
+                        hasUrl: Boolean(res.json.products[0].url),
+                        hasImageUrl: Boolean(res.json.products[0].imageUrl),
+                        price: res.json.products[0].price,
+                        salePrice: res.json.products[0].salePrice,
+                        rating: res.json.products[0].rating,
+                      }
+                    : null,
+                  metadataStatusCode: res.metadata?.statusCode,
+                  metadataError: res.metadata?.error ?? null,
+                  cacheState: res.metadata?.cacheState ?? null,
+                };
+                console.log(`[Discover] raw first result for ${storeDomain}:`, JSON.stringify(raw));
+              } catch {
+                // ignore serialization errors
               }
+            }
+
+            // All LLM-extracted products go to the grid (they have title + url from schema extraction).
+            // Only the fallback (raw search-result page URL) is gated on having an image or price.
+            for (const prod of products) {
+              candidateProducts.push(prod);
+              storeProductsFound++;
             }
 
             if (products.length === 0) {
@@ -484,26 +504,14 @@ export const search = action({
                 storeDomain
               );
 
+              console.log(
+                `[Discover] retry ${storeDomain} url=${(res.url || "").slice(0, 80)} extracted=${products.length} fallback=${Boolean(fallback)}`
+              );
+
+              // All LLM-extracted products go to the grid (same rule as initial pass)
               for (const prod of products) {
-                if (
-                  Boolean(prod.imageUrl) ||
-                  prod.price !== undefined ||
-                  prod.salePrice !== undefined
-                ) {
-                  candidateProducts.push(prod);
-                  storeProductsFound++;
-                } else {
-                  const rawUrl = (res.url || res.metadata?.sourceURL || "").trim();
-                  const rawDesc = (res.description || res.snippet || "").trim();
-                  if (rawUrl) {
-                    fallbackAlsoWorthALook.push({
-                      title: cleanAlsoWorthALookTitle(prod.title || res.title),
-                      url: normalizeUrl(rawUrl),
-                      source: storeDomain,
-                      description: cleanDescription(rawDesc),
-                    });
-                  }
-                }
+                candidateProducts.push(prod);
+                storeProductsFound++;
               }
 
               if (products.length === 0 && fallback) {
@@ -705,6 +713,14 @@ export const search = action({
       }
     }
 
-    return result;
+      return result;
+    } catch (err) {
+      if (err instanceof ConvexError) {
+        throw err;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[discover:search] error: ${msg}`);
+      throw new ConvexError("Something went wrong on our side. Please try again.");
+    }
   },
 });
